@@ -1,6 +1,4 @@
-//! CLI lifecycle management.
-//!
-//! Handles spawning, communicating with, and killing Claude Code CLI processes.
-
+pub mod env_builder;
 pub mod process_manager;
+pub mod resolver;
 pub mod stdin_manager;
