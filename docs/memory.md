@@ -35,7 +35,7 @@
 - [x] **Phase 5** — 命令面板 (79425cb)
 - [x] **Phase 6** — Agent 协作 (0843c5c)
 - [x] **Phase 7** — Workflow (6a7c44c)
-- [ ] **Phase 8** — Skill + 打包 ← 下一步
+- [x] **Phase 8** — Skill + 打包 (0f85c2e) ← 全部完成
 
 ## 已实现模块
 
