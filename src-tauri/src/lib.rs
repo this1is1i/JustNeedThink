@@ -22,7 +22,7 @@ use db::schema;
 use filesystem::watcher::WatcherManager;
 use rusqlite::Connection;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Manager, State};
 use tokio::sync::Mutex as TokioMutex;
 
 // --- App State ---

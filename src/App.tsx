@@ -353,10 +353,13 @@ function AppShell() {
 
 // --- Proper Error Boundary using componentDidCatch ---
 
-class AppErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
+class AppErrorBoundary extends Component<
+  { children: React.ReactNode },
+  { error: Error | null; resetKey: number }
+> {
   constructor(props: { children: React.ReactNode }) {
     super(props);
-    this.state = { error: null };
+    this.state = { error: null, resetKey: 0 };
   }
 
   static getDerivedStateFromError(error: Error) {
@@ -367,11 +370,15 @@ class AppErrorBoundary extends Component<{ children: React.ReactNode }, { error:
     console.error('[AppErrorBoundary] Caught render error:', error.message, info.componentStack);
   }
 
+  handleReset = () => {
+    this.setState({ error: null, resetKey: this.state.resetKey + 1 });
+  };
+
   render() {
     if (this.state.error) {
-      return <ErrorFallback error={this.state.error} onReset={() => this.setState({ error: null })} />;
+      return <ErrorFallback error={this.state.error} onReset={this.handleReset} />;
     }
-    return this.props.children;
+    return <div key={this.state.resetKey}>{this.props.children}</div>;
   }
 }
 

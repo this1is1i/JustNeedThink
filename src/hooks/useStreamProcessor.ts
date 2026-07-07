@@ -151,7 +151,9 @@ function handleAssistantMessage(
 
     switch (blockType) {
       case 'text': {
-        const text = block.text as string | undefined;
+        const rawText = block.text;
+        const text = typeof rawText === 'string' ? rawText
+          : rawText ? String(rawText) : '';
         if (text) {
           handlers.updatePartialMessage(tabId, text);
         }
@@ -189,11 +191,18 @@ function handleAssistantMessage(
       }
 
       case 'tool_result': {
+        // content can be string or object — normalize for React rendering
+        const rawContent = block.content;
+        const safeContent: string =
+          typeof rawContent === 'string' ? rawContent
+          : rawContent && typeof rawContent === 'object' ? JSON.stringify(rawContent, null, 2)
+          : String(rawContent ?? '');
+
         handlers.addMessage(tabId, {
           id: generateMessageId(),
           role: 'system',
           type: 'tool_result',
-          content: block.content as string || '',
+          content: safeContent,
           toolName: block.tool_use_id
             ? `result:${block.tool_use_id}`
             : undefined,
