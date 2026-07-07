@@ -99,17 +99,27 @@ function handleStreamMessage(
       }
       break;
 
-    case 'user':
-      // Echo of user message
+    case 'user': {
+      // Echo of user message — content can be string or content-block array
+      const userMsg = message.message as Record<string, unknown> | undefined;
+      const userContent = userMsg?.content;
+      const safeUserContent: string =
+        typeof userContent === 'string' ? userContent
+        : Array.isArray(userContent)
+          ? userContent.map((b: Record<string, unknown>) =>
+              typeof b.text === 'string' ? b.text : (b.type === 'text' ? String(b.text ?? '') : JSON.stringify(b))
+            ).join('\n')
+          : String(userContent ?? '');
       handlers.addMessage(tabId, {
         id: generateMessageId(),
         role: 'user',
         type: 'text',
-        content: (message.message as { content?: string })?.content || '',
+        content: safeUserContent,
         isPartial: false,
         timestamp: Date.now(),
       });
       break;
+    }
 
     case 'assistant':
       // Assistant message — full or streaming
