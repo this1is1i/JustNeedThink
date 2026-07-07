@@ -122,6 +122,10 @@ export const bridge = {
 
   getCreditHistory: (): Promise<unknown[]> =>
     invoke<unknown[]>('get_credit_history'),
+
+  // Commands
+  listBuiltinCommands: (): Promise<import('../stores/commandStore').PaletteCommand[]> =>
+    invoke<import('../stores/commandStore').PaletteCommand[]>('list_builtin_commands'),
 };
 
 // --- Event Listeners ---

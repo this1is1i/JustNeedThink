@@ -1,4 +1,5 @@
 mod cli;
+mod commands;
 mod credit;
 mod db;
 mod error;
@@ -189,6 +190,13 @@ async fn get_credit_history(state: State<'_, AppState>) -> Result<Vec<credit::us
     Ok(credit::usage_stats::get_daily_history())
 }
 
+// --- Commands ---
+
+#[tauri::command]
+fn list_builtin_commands() -> Result<Vec<commands::builtin::BuiltinCommand>, String> {
+    Ok(commands::builtin::list_builtin_commands())
+}
+
 // --- Run ---
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -238,6 +246,8 @@ pub fn run() {
             // Credit
             get_credit_summary,
             get_credit_history,
+            // Commands
+            list_builtin_commands,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -5,6 +5,7 @@ import { useProjectStore } from './stores/projectStore';
 import { useCreditStore } from './stores/creditStore';
 import { bridge, type CliStatus } from './lib/tauri-bridge';
 import { CreditIndicator } from './components/credits/CreditIndicator';
+import { CommandPalette } from './components/commands/CommandPalette';
 import { ChatPanel } from './components/chat/ChatPanel';
 import { FileExplorer } from './components/files/FileExplorer';
 import { FilePreview } from './components/files/FilePreview';
@@ -281,6 +282,7 @@ function AppShell() {
           onCreate={handleProjectCreate}
         />
       )}
+      <CommandPalette />
     </div>
   );
 }
