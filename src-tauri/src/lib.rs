@@ -202,6 +202,16 @@ fn list_builtin_commands() -> Result<Vec<commands::builtin::BuiltinCommand>, Str
     Ok(commands::builtin::list_builtin_commands())
 }
 
+#[tauri::command]
+fn scan_project_sessions(project_path: String) -> Result<Vec<session::list::DiskSession>, String> {
+    Ok(session::list::list_project_sessions(&project_path))
+}
+
+#[tauri::command]
+fn load_session_content(path: String) -> Result<Vec<serde_json::Value>, String> {
+    session::list::load_session_content(&path)
+}
+
 // --- Agent Commands ---
 
 #[tauri::command]
@@ -279,6 +289,8 @@ pub fn run() {
             session::lifecycle::send_stdin,
             session::lifecycle::kill_session,
             session::lifecycle::list_active_processes,
+            scan_project_sessions,
+            load_session_content,
             // Filesystem
             read_file_tree,
             read_file_content,

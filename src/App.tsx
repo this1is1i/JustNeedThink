@@ -157,10 +157,19 @@ function AppShell() {
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
   useEffect(() => { ensureTab(activeSessionId); }, [ensureTab, activeSessionId]);
 
-  // Load file tree for active project
+  // Load file tree + sessions for active project
   useEffect(() => {
     if (activeProject) {
       loadTree(activeProject.path);
+      bridge.scanProjectSessions(activeProject.path).then((diskSessions) => {
+        if (diskSessions.length > 0) {
+          setSessions(diskSessions.map((s) => ({
+            id: s.id,
+            name: s.preview || s.id.slice(0, 8),
+            status: 'idle' as const,
+          })));
+        }
+      }).catch(() => {});
     }
   }, [activeProject, loadTree]);
 
@@ -245,7 +254,7 @@ function AppShell() {
         </aside>
 
         {/* Chat */}
-        <main className="flex flex-1 flex-col overflow-hidden">
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <ChatPanel tabId={activeSessionId} cwd={cwd} />
         </main>
 

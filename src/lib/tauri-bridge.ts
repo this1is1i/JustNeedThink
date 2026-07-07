@@ -153,7 +153,22 @@ export const bridge = {
 
   writeSkill: (path: string, content: string): Promise<void> =>
     invoke<void>('write_skill', { path, content }),
+
+  // Session history
+  scanProjectSessions: (projectPath: string): Promise<SessionListItem[]> =>
+    invoke<SessionListItem[]>('scan_project_sessions', { projectPath }),
+
+  loadSessionContent: (path: string): Promise<unknown[]> =>
+    invoke<unknown[]>('load_session_content', { path }),
 };
+
+export interface SessionListItem {
+  id: string;
+  path: string;
+  project: string;
+  modifiedAt: number;
+  preview: string;
+}
 
 // --- Event Listeners ---
 
