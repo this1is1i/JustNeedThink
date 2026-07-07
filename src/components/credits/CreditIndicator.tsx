@@ -24,13 +24,14 @@ export function CreditIndicator({ summary }: CreditIndicatorProps) {
           {/* Progress bar */}
           <div
             className="h-1.5 w-16 overflow-hidden rounded-full"
-            style={{ backgroundColor: 'var(--color-surface)' }}
+            style={{ backgroundColor: 'var(--color-bg-tertiary)' }}
           >
             <div
               className="h-full rounded-full transition-all"
               style={{
                 width: `${Math.min(pct, 100)}%`,
                 backgroundColor: barColor,
+                boxShadow: `0 0 8px ${barColor}`,
               }}
             />
           </div>

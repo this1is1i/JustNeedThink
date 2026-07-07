@@ -12,14 +12,18 @@ pub struct DiskSession {
     pub preview: String,
 }
 
-/// Encode a project path the same way Claude CLI does.
-/// D:\AAWorkSpeace\liteplay → -D--AAWorkSpeace-liteplay
+/// Encode a project path the same way Claude CLI does: every path separator
+/// and drive punctuation becomes `-`, alphanumerics are kept.
+/// `D:\AAWorkSpeace\liteplay\JustNeedThink` → `D--AAWorkSpeace-liteplay-JustNeedThink`
+/// (matches the real `~/.claude/projects/<encoded>/` directory; no leading dash
+/// on Windows drive paths, no `sessions` subfolder).
 fn encode_project_path(path: &str) -> String {
-    let cleaned = path
-        .replace(':', "")
-        .replace('\\', "-")
-        .replace('/', "-");
-    format!("-{}", cleaned.trim_start_matches('-'))
+    path.chars()
+        .map(|c| match c {
+            '\\' | '/' | ':' | '.' | ' ' => '-',
+            other => other,
+        })
+        .collect()
 }
 
 /// Scan the Claude CLI sessions directory for a project.
@@ -30,11 +34,12 @@ pub fn list_project_sessions(project_path: &str) -> Vec<DiskSession> {
     };
 
     let encoded = encode_project_path(project_path);
+    // Claude CLI stores session transcripts as <uuid>.jsonl directly under the
+    // project directory — there is no `sessions` subfolder.
     let sessions_dir = home
         .join(".claude")
         .join("projects")
-        .join(&encoded)
-        .join("sessions");
+        .join(&encoded);
 
     if !sessions_dir.exists() {
         return Vec::new();

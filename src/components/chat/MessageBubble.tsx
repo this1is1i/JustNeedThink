@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ChatMessage } from '../../stores/chatStore';
@@ -11,7 +12,7 @@ function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) + '...' : s;
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+function MessageBubbleImpl({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
 
   // Tool use: collapsible card
@@ -59,21 +60,26 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 
   // Text / partial: markdown rendered
   return (
-    <div className={`flex w-full px-4 py-1.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <div className={`jnt-animate-in flex w-full px-4 py-1.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`max-w-[85%] rounded-lg px-4 py-2.5 text-sm leading-relaxed ${message.isPartial ? 'opacity-90' : ''}`}
+        className={`max-w-[85%] px-4 py-2.5 text-sm leading-relaxed ${message.isPartial ? 'opacity-95' : ''}`}
         style={{
-          backgroundColor: isUser ? 'var(--color-accent)' : 'var(--color-surface)',
-          color: isUser ? 'var(--color-bg)' : 'var(--color-text)',
+          backgroundImage: isUser ? 'var(--gradient-accent)' : 'none',
+          backgroundColor: isUser ? undefined : 'var(--color-surface)',
+          color: isUser ? '#04121a' : 'var(--color-text)',
+          border: isUser ? 'none' : '1px solid var(--color-border)',
+          borderRadius: isUser ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
+          boxShadow: isUser ? 'var(--glow-accent)' : 'var(--shadow-sm)',
         }}
       >
-        <div className="prose prose-sm max-w-none"
+        <div className="jnt-prose prose prose-sm max-w-none"
           style={{
-            '--tw-prose-body': isUser ? 'var(--color-bg)' : 'var(--color-text)',
-            '--tw-prose-headings': isUser ? 'var(--color-bg)' : 'var(--color-text)',
-            '--tw-prose-code': isUser ? 'var(--color-bg)' : 'var(--color-accent)',
-            '--tw-prose-pre-bg': isUser ? 'rgba(0,0,0,0.2)' : 'var(--color-bg-tertiary)',
-            '--tw-prose-pre-code': isUser ? 'var(--color-bg)' : 'var(--color-text-secondary)',
+            '--tw-prose-body': isUser ? '#04121a' : 'var(--color-text)',
+            '--tw-prose-headings': isUser ? '#04121a' : 'var(--color-text)',
+            '--tw-prose-bold': isUser ? '#04121a' : 'var(--color-text)',
+            '--tw-prose-code': isUser ? '#04121a' : 'var(--color-accent)',
+            '--tw-prose-pre-bg': isUser ? 'rgba(0,0,0,0.22)' : 'var(--color-bg-tertiary)',
+            '--tw-prose-pre-code': isUser ? '#04121a' : 'var(--color-text-secondary)',
           } as React.CSSProperties}
         >
           <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -81,10 +87,14 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           </ReactMarkdown>
         </div>
         {message.isPartial && (
-          <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse rounded-full align-middle"
-            style={{ backgroundColor: 'var(--color-text-secondary)' }} />
+          <span className="jnt-caret ml-0.5 inline-block h-3.5 w-[3px] rounded-full align-middle"
+            style={{ backgroundColor: 'var(--color-accent)' }} />
         )}
       </div>
     </div>
   );
 }
+
+// Finalized message objects are referentially stable, so memo prevents every
+// bubble from re-rendering (and re-parsing markdown) on each streaming token.
+export const MessageBubble = memo(MessageBubbleImpl);

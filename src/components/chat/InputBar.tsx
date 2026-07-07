@@ -8,6 +8,7 @@ interface InputBarProps {
 
 export function InputBar({ onSubmit, isRunning, placeholder }: InputBarProps) {
   const [input, setInput] = useState('');
+  const [focused, setFocused] = useState(false);
 
   const handleSubmit = useCallback(() => {
     const trimmed = input.trim();
@@ -34,21 +35,25 @@ export function InputBar({ onSubmit, isRunning, placeholder }: InputBarProps) {
         borderColor: 'var(--color-border)',
       }}
     >
-      <div className="flex items-end gap-2">
+      <div
+        className="flex items-end gap-2 rounded-xl border p-1.5 transition-shadow"
+        style={{
+          backgroundColor: 'var(--color-bg)',
+          borderColor: focused ? 'transparent' : 'var(--color-border)',
+          boxShadow: focused ? 'var(--glow-accent)' : 'none',
+        }}
+      >
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder || 'Type a message... (Enter to send, Shift+Enter for new line)'}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder={placeholder || 'Type a message…  (Enter to send, Shift+Enter for new line)'}
           disabled={isRunning}
           rows={1}
-          className="flex-1 resize-none rounded-lg border px-3 py-2 text-sm outline-none transition-colors"
-          style={{
-            backgroundColor: 'var(--color-bg)',
-            borderColor: 'var(--color-border)',
-            color: 'var(--color-text)',
-            maxHeight: '120px',
-          }}
+          className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none"
+          style={{ color: 'var(--color-text)', maxHeight: '120px' }}
           onInput={(e) => {
             const target = e.target as HTMLTextAreaElement;
             target.style.height = 'auto';
@@ -58,22 +63,13 @@ export function InputBar({ onSubmit, isRunning, placeholder }: InputBarProps) {
         <button
           onClick={handleSubmit}
           disabled={isRunning || !input.trim()}
-          className="rounded-lg px-4 py-2 text-sm font-medium transition-all"
-          style={{
-            backgroundColor: isRunning || !input.trim()
-              ? 'var(--color-surface)'
-              : 'var(--color-accent)',
-            color: isRunning || !input.trim()
-              ? 'var(--color-text-muted)'
-              : 'var(--color-bg)',
-            cursor: isRunning || !input.trim() ? 'not-allowed' : 'pointer',
-          }}
+          className="jnt-btn-accent flex-shrink-0 px-4 py-1.5 text-sm"
         >
-          {isRunning ? '...' : 'Send'}
+          {isRunning ? '…' : 'Send'}
         </button>
       </div>
       <div
-        className="mt-1 text-xs"
+        className="mt-1.5 px-1 text-[11px]"
         style={{ color: 'var(--color-text-muted)' }}
       >
         Enter to send · Shift+Enter for new line

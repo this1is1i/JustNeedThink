@@ -20,10 +20,12 @@ import { ProjectCreateDialog } from './components/projects/ProjectCreateDialog';
 function ErrorFallback({ error, onReset }: { error: Error; onReset: () => void }) {
   return (
     <div className="flex h-full items-center justify-center p-8" style={{ backgroundColor: 'var(--color-bg)' }}>
-      <div className="max-w-md rounded-lg p-6 text-center" style={{ backgroundColor: 'var(--color-surface)' }}>
-        <h2 className="mb-2 text-lg font-semibold" style={{ color: 'var(--color-error)' }}>Something went wrong</h2>
-        <p className="mb-4 text-sm" style={{ color: 'var(--color-text-secondary)' }}>{error.message}</p>
-        <button onClick={onReset} className="rounded px-4 py-2 text-sm font-medium" style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-bg)' }}>Reload</button>
+      <div className="jnt-card jnt-animate-in max-w-md p-7 text-center">
+        <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-full text-xl"
+          style={{ backgroundColor: 'rgba(248,113,113,0.12)', color: 'var(--color-error)' }}>⚠</div>
+        <h2 className="mb-2 text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Something went wrong</h2>
+        <p className="mb-5 break-words text-sm" style={{ color: 'var(--color-text-secondary)' }}>{error.message}</p>
+        <button onClick={onReset} className="jnt-btn-accent px-5 py-2 text-sm">Reload</button>
       </div>
     </div>
   );
@@ -34,9 +36,13 @@ function ErrorFallback({ error, onReset }: { error: Error; onReset: () => void }
 function SetupWizard({ cliStatus, onRetry }: { cliStatus: CliStatus; onRetry: () => void }) {
   return (
     <div className="flex h-full items-center justify-center" style={{ backgroundColor: 'var(--color-bg)' }}>
-      <div className="max-w-md rounded-lg p-8 text-center" style={{ backgroundColor: 'var(--color-surface)' }}>
-        <h2 className="mb-4 text-xl font-bold" style={{ color: 'var(--color-text)' }}>Setup Required</h2>
-        <div className="mb-4 space-y-2 text-left text-sm">
+      <div className="jnt-card jnt-gradient-border jnt-animate-in max-w-md p-8 text-center">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl text-2xl"
+          style={{ backgroundImage: 'var(--gradient-accent)', color: '#04121a' }}>◆</div>
+        <h2 className="mb-1 text-xl font-bold" style={{ color: 'var(--color-text)' }}>Setup Required</h2>
+        <p className="mb-5 text-xs" style={{ color: 'var(--color-text-muted)' }}>Connect the Claude CLI to get started</p>
+        <div className="mb-5 space-y-2 rounded-xl border p-3 text-left text-sm"
+          style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-bg-tertiary)' }}>
           <div className="flex items-center gap-2">
             <span>{cliStatus.installed ? '✅' : '❌'}</span>
             <span style={{ color: 'var(--color-text-secondary)' }}>
@@ -55,7 +61,7 @@ function SetupWizard({ cliStatus, onRetry }: { cliStatus: CliStatus; onRetry: ()
             Run <code className="rounded px-1" style={{ backgroundColor: 'var(--color-bg)' }}>npm install -g @anthropic-ai/claude-code</code> in a terminal, then retry.
           </p>
         )}
-        <button onClick={onRetry} className="rounded px-6 py-2 text-sm font-medium" style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-bg)' }}>Retry Detection</button>
+        <button onClick={onRetry} className="jnt-btn-accent px-6 py-2 text-sm">Retry Detection</button>
       </div>
     </div>
   );
@@ -75,29 +81,35 @@ function SessionList({ sessions, activeId, onSelect, onNew }: {
   onSelect: (id: string) => void;
   onNew: () => void;
 }) {
+  const statusColor = (status: string) =>
+    status === 'running' ? 'var(--color-accent)'
+    : status === 'completed' ? 'var(--color-success)'
+    : 'var(--color-text-muted)';
+
   return (
     <div className="flex flex-col" style={{ backgroundColor: 'var(--color-bg-secondary)' }}>
-      <div className="flex items-center justify-between border-b px-3 py-1.5" style={{ borderColor: 'var(--color-border)' }}>
-        <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>SESSIONS</span>
-        <button onClick={onNew} className="rounded px-2 py-0.5 text-xs font-medium" style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-bg)' }}>+</button>
+      <div className="flex items-center justify-between px-3 pb-1.5 pt-2.5">
+        <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Sessions</span>
+        <button onClick={onNew} title="New session"
+          className="jnt-btn-ghost flex h-5 w-5 items-center justify-center text-sm leading-none">+</button>
       </div>
-      <div className="max-h-[200px] overflow-y-auto">
+      <div className="max-h-[200px] overflow-y-auto px-1.5 pb-1.5">
         {sessions.map((s) => (
           <button
             key={s.id}
             onClick={() => onSelect(s.id)}
-            className="w-full border-b px-3 py-1.5 text-left text-sm transition-colors"
-            style={{
-              backgroundColor: s.id === activeId ? 'var(--color-surface)' : 'transparent',
-              borderColor: 'var(--color-border)',
-            }}
+            className={`jnt-row mb-0.5 flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left ${s.id === activeId ? 'jnt-row-active' : ''}`}
           >
-            <div className="truncate text-xs" style={{ color: s.id === activeId ? 'var(--color-text)' : 'var(--color-text-secondary)' }}>
-              {s.name}
+            <span className="jnt-dot h-1.5 w-1.5 flex-shrink-0 rounded-full"
+              style={{ backgroundColor: statusColor(s.status), color: statusColor(s.status) }} />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-xs" style={{ color: s.id === activeId ? 'var(--color-text)' : 'var(--color-text-secondary)' }}>
+                {s.name}
+              </div>
             </div>
-            <div style={{ color: 'var(--color-text-muted)', fontSize: '10px' }}>
-              {s.status === 'running' ? '⚡ Running' : s.status === 'completed' ? '✓ Done' : '○ Idle'}
-            </div>
+            <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
+              {s.status === 'running' ? 'running' : s.status === 'completed' ? 'done' : 'idle'}
+            </span>
           </button>
         ))}
       </div>
@@ -150,7 +162,12 @@ function AppShell() {
 
   // Init
   const checkCli = useCallback(async () => {
-    try { setCliStatus(await bridge.checkClaudeCli()); } catch { /* ignore */ }
+    try {
+      setCliStatus(await bridge.checkClaudeCli());
+    } catch {
+      // Bridge call failed — treat as CLI not installed so the setup wizard shows
+      setCliStatus({ installed: false, path: null, version: null, git_bash_available: false });
+    }
   }, []);
 
   useEffect(() => { checkCli(); fetchCreditSummary(); }, [checkCli, fetchCreditSummary]);
@@ -213,20 +230,26 @@ function AppShell() {
     <div className="flex h-full flex-col" style={{ backgroundColor: 'var(--color-bg)' }}>
       {/* Title bar */}
       <div
-        className="flex items-center justify-between border-b px-4 py-2 text-sm"
+        className="flex items-center justify-between border-b px-4 py-2.5 text-sm"
         style={{ backgroundColor: 'var(--color-bg-tertiary)', borderColor: 'var(--color-border)' }}
         data-tauri-drag-region
       >
-        <span className="font-medium" style={{ color: 'var(--color-text)' }}>JustNeedThink</span>
         <div className="flex items-center gap-2">
+          <span className="flex h-5 w-5 items-center justify-center rounded-md text-xs font-bold"
+            style={{ backgroundImage: 'var(--gradient-accent)', color: '#04121a' }}>◆</span>
+          <span className="bg-clip-text font-semibold tracking-tight"
+            style={{ backgroundImage: 'var(--gradient-accent)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            JustNeedThink
+          </span>
+        </div>
+        <div className="flex items-center gap-2.5">
           <button
             onClick={() => setRightPanelOpen(!rightPanelOpen)}
-            className="rounded px-2 py-0.5 text-xs"
-            style={{ backgroundColor: 'var(--color-surface)', color: 'var(--color-text-secondary)' }}
+            className="jnt-btn-ghost px-2.5 py-1 text-xs"
           >
             {rightPanelOpen ? 'Hide Panel' : 'Show Panel'}
           </button>
-          <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+          <span className="jnt-chip px-2 py-0.5 text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
             {cliStatus?.version ? `CLI ${cliStatus.version}` : 'v0.2.0'}
           </span>
         </div>
@@ -253,8 +276,9 @@ function AppShell() {
           )}
         </aside>
 
-        {/* Chat */}
-        <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {/* Chat — min-w-0 so the center column is sized by the preset layout
+            (left 240 + right 300 + remaining), not stretched by long content. */}
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <ChatPanel tabId={activeSessionId} cwd={cwd} />
         </main>
 
@@ -262,43 +286,22 @@ function AppShell() {
         {rightPanelOpen && (
           <aside className="flex w-[300px] flex-col border-l" style={{ borderColor: 'var(--color-border)' }}>
             {/* Tab selector */}
-            <div className="flex border-b text-xs" style={{ borderColor: 'var(--color-border)' }}>
-              <button
-                onClick={() => setRightTab('files')}
-                className="flex-1 py-1.5 text-center"
-                style={{
-                  backgroundColor: rightTab === 'files' ? 'var(--color-surface)' : 'transparent',
-                  color: rightTab === 'files' ? 'var(--color-accent)' : 'var(--color-text-muted)',
-                  borderBottom: rightTab === 'files' ? '2px solid var(--color-accent)' : '2px solid transparent',
-                }}
-              >Files</button>
-              <button
-                onClick={() => setRightTab('agents')}
-                className="flex-1 py-1.5 text-center"
-                style={{
-                  backgroundColor: rightTab === 'agents' ? 'var(--color-surface)' : 'transparent',
-                  color: rightTab === 'agents' ? 'var(--color-accent)' : 'var(--color-text-muted)',
-                  borderBottom: rightTab === 'agents' ? '2px solid var(--color-accent)' : '2px solid transparent',
-                }}
-              >Agents</button>
-              <button
-                onClick={() => setRightTab('workflows')}
-                className="flex-1 py-1.5 text-center"
-                style={{
-                  backgroundColor: rightTab === 'workflows' ? 'var(--color-surface)' : 'transparent',
-                  color: rightTab === 'workflows' ? 'var(--color-accent)' : 'var(--color-text-muted)',
-                  borderBottom: rightTab === 'workflows' ? '2px solid var(--color-accent)' : '2px solid transparent',
-                }}
-              >Workflows</button>
-              <button
-                onClick={() => setRightTab('skills')}
-                className="flex-1 py-1.5 text-center"
-                style={{
-                  backgroundColor: rightTab === 'skills' ? 'var(--color-surface)' : 'transparent',
-                  color: rightTab === 'skills' ? 'var(--color-accent)' : 'var(--color-text-muted)',
-                  borderBottom: rightTab === 'skills' ? '2px solid var(--color-accent)' : '2px solid transparent',
-                }}
-              >Skills</button>
+            <div className="flex items-center gap-1 border-b p-1.5 text-xs" style={{ borderColor: 'var(--color-border)' }}>
+              {(['files', 'agents', 'workflows', 'skills'] as const).map((tab) => {
+                const active = rightTab === tab;
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setRightTab(tab)}
+                    className="flex-1 rounded-md py-1.5 text-center font-medium capitalize transition-colors"
+                    style={{
+                      backgroundColor: active ? 'var(--color-surface)' : 'transparent',
+                      color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                      boxShadow: active ? 'inset 0 0 0 1px rgba(var(--color-accent-rgb),0.25)' : 'none',
+                    }}
+                  >{tab}</button>
+                );
+              })}
             </div>
 
             {rightTab === 'files' ? (
@@ -335,15 +338,23 @@ function AppShell() {
 
       {/* Status bar */}
       <div
-        className="flex items-center justify-between border-t px-3 py-1 text-xs"
+        className="flex items-center justify-between border-t px-3 py-1.5 text-xs"
         style={{ backgroundColor: 'var(--color-bg-tertiary)', borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
       >
         <span className="flex items-center gap-3">
-          <span>{cliStatus?.installed ? '✅' : '⏳'}</span>
-          {activeProject && <span>📁 {activeProject.name}</span>}
+          <span className="flex items-center gap-1.5">
+            <span className="jnt-dot h-1.5 w-1.5 rounded-full"
+              style={{ backgroundColor: cliStatus?.installed ? 'var(--color-success)' : 'var(--color-warning)', color: cliStatus?.installed ? 'var(--color-success)' : 'var(--color-warning)' }} />
+            {cliStatus?.installed ? 'CLI ready' : 'connecting'}
+          </span>
+          {activeProject && (
+            <span className="flex items-center gap-1" style={{ color: 'var(--color-text-secondary)' }}>
+              <span style={{ opacity: 0.7 }}>❯</span>{activeProject.name}
+            </span>
+          )}
           <CreditIndicator summary={creditSummary} />
         </span>
-        <span>v0.2.0</span>
+        <span className="tracking-wide">v0.2.0</span>
       </div>
 
       {/* Project create dialog */}
@@ -387,7 +398,10 @@ class AppErrorBoundary extends Component<
     if (this.state.error) {
       return <ErrorFallback error={this.state.error} onReset={this.handleReset} />;
     }
-    return <div key={this.state.resetKey}>{this.props.children}</div>;
+    // Must be h-full: this wrapper sits between #root (height:100%) and AppShell
+    // (h-full). Without it the height chain breaks and AppShell grows with its
+    // content, pushing the input/status bar below the window's lower edge.
+    return <div className="h-full" key={this.state.resetKey}>{this.props.children}</div>;
   }
 }
 

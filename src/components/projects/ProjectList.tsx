@@ -12,36 +12,33 @@ export function ProjectList({ projects, activeId, onSelect, onDelete, onNew }: P
   return (
     <div className="flex h-full flex-col" style={{ backgroundColor: 'var(--color-bg-secondary)' }}>
       <div
-        className="flex items-center justify-between border-b px-3 py-2"
-        style={{ borderColor: 'var(--color-border)' }}
+        className="flex items-center justify-between px-3 pb-1.5 pt-3"
       >
-        <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-          PROJECTS
+        <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+          Projects
         </span>
         <button
           onClick={onNew}
-          className="rounded px-2 py-0.5 text-xs font-medium"
-          style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-bg)' }}
+          className="jnt-btn-ghost px-2 py-0.5 text-xs font-medium"
         >
           + Add
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto px-1.5">
         {projects.length === 0 ? (
-          <div className="px-3 py-4 text-center text-xs" style={{ color: 'var(--color-text-muted)' }}>
-            No projects yet. Click "+ Add" to create one.
+          <div className="px-3 py-6 text-center text-xs" style={{ color: 'var(--color-text-muted)' }}>
+            No projects yet.<br />Click "+ Add" to create one.
           </div>
         ) : (
           projects.map((p) => (
-            <button
+            <div
               key={p.id}
+              role="button"
+              tabIndex={0}
               onClick={() => onSelect(p.id)}
-              className="group w-full border-b px-3 py-2.5 text-left transition-colors"
-              style={{
-                backgroundColor: p.id === activeId ? 'var(--color-surface)' : 'transparent',
-                borderColor: 'var(--color-border)',
-              }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(p.id); } }}
+              className={`jnt-row group mb-0.5 block w-full cursor-pointer rounded-lg px-2.5 py-2 text-left ${p.id === activeId ? 'jnt-row-active' : ''}`}
             >
               <div className="flex items-center justify-between">
                 <span
@@ -72,7 +69,7 @@ export function ProjectList({ projects, activeId, onSelect, onDelete, onNew }: P
                   <span style={{ color: 'var(--color-info)' }}>⎇ {p.gitBranch}</span>
                 )}
               </div>
-            </button>
+            </div>
           ))
         )}
       </div>

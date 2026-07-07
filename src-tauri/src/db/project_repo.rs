@@ -3,6 +3,24 @@ use rusqlite::Connection;
 
 /// Insert or update a project record.
 pub fn upsert_project(conn: &Connection, project: &ProjectInfo) -> Result<(), String> {
+    // Pre-check the UNIQUE(path) constraint so a duplicate surfaces as a
+    // friendly message instead of a raw SQL error string.
+    let existing: Option<String> = conn
+        .query_row(
+            "SELECT id FROM projects WHERE path = ?1",
+            [&project.path],
+            |row| row.get(0),
+        )
+        .ok();
+    if let Some(existing_id) = existing {
+        if existing_id != project.id {
+            return Err(format!(
+                "A project already exists at this path: {}",
+                project.path
+            ));
+        }
+    }
+
     conn.execute(
         "INSERT INTO projects (id, name, path, last_opened_at, created_at, is_archived, sort_order)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)

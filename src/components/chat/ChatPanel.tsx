@@ -36,18 +36,31 @@ export function ChatPanel({ tabId, cwd }: ChatPanelProps) {
   const isRunning = tab?.sessionStatus === 'running' || isStreaming;
 
   const handleSubmit = async (prompt: string) => {
-    const newStdinId = await sendMessage(tabId, prompt, {
-      stdinId,
-      cwd,
-      permissionMode: 'default',
-    });
-    if (newStdinId && !stdinId) {
-      useChatStore.getState().setSessionMeta(tabId, { stdinId: newStdinId });
+    try {
+      const newStdinId = await sendMessage(tabId, prompt, {
+        stdinId,
+        cwd,
+        permissionMode: 'default',
+      });
+      if (newStdinId && !stdinId) {
+        useChatStore.getState().setSessionMeta(tabId, { stdinId: newStdinId });
+      }
+    } catch (err) {
+      const store = useChatStore.getState();
+      store.setSessionStatus(tabId, 'error');
+      store.addMessage(tabId, {
+        id: `err_${Date.now()}`,
+        role: 'system',
+        type: 'tool_result',
+        content: `Failed to send message: ${err instanceof Error ? err.message : String(err)}`,
+        isPartial: false,
+        timestamp: Date.now(),
+      });
     }
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {/* Activity indicator */}
       {activityStatus.phase !== 'idle' && activityStatus.phase !== 'completed' && (
         <div
@@ -58,11 +71,11 @@ export function ChatPanel({ tabId, cwd }: ChatPanelProps) {
             color: 'var(--color-text-secondary)',
           }}
         >
-          <span className="inline-block h-2 w-2 rounded-full"
+          <span className="jnt-pulse inline-block h-2 w-2 rounded-full"
             style={{ backgroundColor:
               activityStatus.phase === 'thinking' ? 'var(--color-warning)'
               : activityStatus.phase === 'tool' ? 'var(--color-info)'
-              : 'var(--color-success)'
+              : 'var(--color-accent)'
             }}
           />
           {activityStatus.phase === 'thinking' && 'Thinking...'}
@@ -74,9 +87,15 @@ export function ChatPanel({ tabId, cwd }: ChatPanelProps) {
       {/* Messages — only this area scrolls */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden px-1 py-2">
         {messages.length === 0 && !isStreaming && (
-          <div className="flex h-full items-center justify-center text-sm"
-            style={{ color: 'var(--color-text-muted)' }}>
-            Send a message to start
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+            <div className="jnt-pulse flex h-14 w-14 items-center justify-center rounded-2xl text-2xl"
+              style={{ backgroundImage: 'var(--gradient-accent)', color: '#04121a' }}>◆</div>
+            <div className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+              Ready when you are
+            </div>
+            <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+              Send a message to start a session
+            </div>
           </div>
         )}
 
@@ -99,12 +118,26 @@ export function ChatPanel({ tabId, cwd }: ChatPanelProps) {
           </div>
         )}
 
-        {/* Streaming: partial text */}
+        {/* Streaming: partial text — rendered as PLAIN text (no markdown) so we
+            don't re-parse the whole growing string on every token. Markdown is
+            applied only once the message is finalized (see MessageBubble). */}
         {partialText && (
-          <MessageBubble message={{
-            id: 'partial', role: 'assistant', type: 'text',
-            content: partialText, isPartial: true, timestamp: Date.now(),
-          }} />
+          <div className="jnt-animate-in flex w-full justify-start px-4 py-1.5">
+            <div
+              className="max-w-[85%] whitespace-pre-wrap break-words px-4 py-2.5 text-sm leading-relaxed"
+              style={{
+                backgroundColor: 'var(--color-surface)',
+                color: 'var(--color-text)',
+                border: '1px solid var(--color-border)',
+                borderRadius: '14px 14px 14px 4px',
+                boxShadow: 'var(--shadow-sm)',
+              }}
+            >
+              {partialText}
+              <span className="jnt-caret ml-0.5 inline-block h-3.5 w-[3px] rounded-full align-middle"
+                style={{ backgroundColor: 'var(--color-accent)' }} />
+            </div>
+          </div>
         )}
 
         <div ref={messagesEndRef} />

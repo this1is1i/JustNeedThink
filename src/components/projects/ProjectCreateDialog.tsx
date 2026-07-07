@@ -19,19 +19,18 @@ export function ProjectCreateDialog({ onClose, onCreate }: ProjectCreateDialogPr
       await onCreate(name.trim(), path.trim());
       onClose();
     } catch (err) {
-      setError(String(err));
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+      className="jnt-backdrop fixed inset-0 z-50 flex items-center justify-center"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-lg p-6"
-        style={{ backgroundColor: 'var(--color-surface)' }}
+        className="jnt-card jnt-gradient-border jnt-animate-in w-full max-w-md p-6"
+        style={{ boxShadow: 'var(--shadow-lg)' }}
         onClick={(e) => e.stopPropagation()}
       >
         <h3
@@ -92,24 +91,16 @@ export function ProjectCreateDialog({ onClose, onCreate }: ProjectCreateDialogPr
           )}
         </div>
 
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-5 flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="rounded px-4 py-2 text-sm"
-            style={{
-              backgroundColor: 'var(--color-bg)',
-              color: 'var(--color-text-secondary)',
-            }}
+            className="jnt-btn-ghost px-4 py-2 text-sm"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
-            className="rounded px-4 py-2 text-sm font-medium"
-            style={{
-              backgroundColor: 'var(--color-accent)',
-              color: 'var(--color-bg)',
-            }}
+            className="jnt-btn-accent px-4 py-2 text-sm"
           >
             Create
           </button>

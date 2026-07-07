@@ -180,15 +180,25 @@ pub async fn kill_session(
     state: State<'_, AppState>,
     stdin_id: String,
 ) -> Result<(), String> {
+    // Dropping the stdin handle sends EOF to the CLI, letting it finish the
+    // current turn and write a complete, resumable session transcript.
     state.stdin_manager.remove(&stdin_id).await;
 
     if let Some(proc) = state.process_manager.remove(&stdin_id).await {
         let mut managed = proc.lock().await;
-        managed
-            .child
-            .kill()
-            .await
-            .map_err(|e| format!("Failed to kill process: {}", e))?;
+        // Give the CLI a moment to flush its session record and exit cleanly;
+        // force-kill only if it doesn't terminate on its own.
+        let graceful = tokio::time::timeout(
+            tokio::time::Duration::from_secs(3),
+            managed.child.wait(),
+        ).await;
+        if graceful.is_err() {
+            managed
+                .child
+                .kill()
+                .await
+                .map_err(|e| format!("Failed to kill process: {}", e))?;
+        }
     }
 
     Ok(())
@@ -202,6 +212,15 @@ pub async fn list_active_processes(
 }
 
 // --- Internal Helpers ---
+
+/// Loose UUID check (8-4-4-4-12 hex) — enough to decide whether an id is safe
+/// to pass to the CLI's `--session-id` flag.
+fn is_uuid(s: &str) -> bool {
+    let parts: Vec<&str> = s.split('-').collect();
+    parts.len() == 5
+        && [8, 4, 4, 4, 12] == [parts[0].len(), parts[1].len(), parts[2].len(), parts[3].len(), parts[4].len()]
+        && s.chars().all(|c| c == '-' || c.is_ascii_hexdigit())
+}
 
 fn build_claude_command(
     cli: &CliBinary,
@@ -225,6 +244,15 @@ fn build_claude_command(
 
     // Working directory
     cmd.current_dir(&params.cwd);
+
+    // Session id — use our own UUID so the on-disk transcript
+    // (~/.claude/projects/<enc>/<session_id>.jsonl) is a first-class, resumable
+    // session that Claude Code CLI recognises, and that we can correlate with
+    // our UI session. Only pass it when it looks like a UUID (the CLI rejects
+    // non-UUID ids); older non-UUID ids fall back to CLI-generated ones.
+    if is_uuid(&params.session_id) {
+        cmd.arg("--session-id").arg(&params.session_id);
+    }
 
     // Model
     if let Some(ref model) = params.model {
@@ -324,7 +352,20 @@ async fn read_stderr_stream(
     let reader = BufReader::new(stderr);
     let mut lines = reader.lines();
 
-    while let Ok(Some(line)) = lines.next_line().await {
+    // Mirror the stdout reader's 30-minute inactivity timeout so a hung process
+    // with no stderr output cannot leak this task forever.
+    let timeout = tokio::time::Duration::from_secs(1800);
+
+    loop {
+        let line = match tokio::time::timeout(timeout, lines.next_line()).await {
+            Ok(Ok(Some(l))) => l,
+            Ok(Ok(None)) => break, // EOF
+            Ok(Err(_)) => break,   // Read error
+            Err(_elapsed) => {
+                log::warn!("[stderr:{}] Reader timed out after 30min of inactivity", stdin_id);
+                break;
+            }
+        };
         let event_name = format!("claude:stderr:{}", stdin_id);
         let _ = app.emit(&event_name, &line);
     }

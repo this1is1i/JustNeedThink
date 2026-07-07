@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -77,19 +77,59 @@ fn parse_skill_metadata(content: &str) -> (Option<String>, Option<String>) {
     (name, desc)
 }
 
+/// Ensure a skill path lies inside a `.claude/skills` directory. Prevents
+/// arbitrary file read/write/delete through the skill IPC commands (a
+/// malicious or buggy frontend could otherwise target any file on disk).
+fn validate_skill_path(path: &str) -> Result<PathBuf, String> {
+    if path.trim().is_empty() {
+        return Err("Skill path is empty".to_string());
+    }
+    // Reject traversal sequences up front — defends the not-yet-created-file
+    // case where canonicalize() cannot resolve `..` for us.
+    if path.contains("..") {
+        return Err("Skill path must not contain '..'".to_string());
+    }
+
+    let p = Path::new(path);
+    // The file may not exist yet (new skill), so fall back to canonicalizing
+    // the parent directory and rejoining the file name.
+    let resolved = p.canonicalize().unwrap_or_else(|_| match (p.parent(), p.file_name()) {
+        (Some(parent), Some(name)) => parent
+            .canonicalize()
+            .map(|c| c.join(name))
+            .unwrap_or_else(|_| p.to_path_buf()),
+        _ => p.to_path_buf(),
+    });
+
+    let normalized = resolved.to_string_lossy().replace('\\', "/");
+    if !normalized.contains("/.claude/skills/") {
+        return Err("Skill operations are restricted to .claude/skills directories".to_string());
+    }
+    Ok(resolved)
+}
+
 /// Read a skill file's content.
 pub fn read_skill(path: &str) -> Result<String, String> {
-    fs::read_to_string(path).map_err(|e| format!("Failed to read skill: {}", e))
+    let path = validate_skill_path(path)?;
+    fs::read_to_string(&path).map_err(|e| format!("Failed to read skill: {}", e))
 }
 
 /// Write skill content back to file.
 pub fn write_skill(path: &str, content: &str) -> Result<(), String> {
-    fs::write(path, content).map_err(|e| format!("Failed to write skill: {}", e))
+    let path = validate_skill_path(path)?;
+    fs::write(&path, content).map_err(|e| format!("Failed to write skill: {}", e))
 }
 
-/// Delete a skill file.
+/// Delete a skill file's containing folder (the `<skill-name>/` directory).
 pub fn delete_skill(path: &str) -> Result<(), String> {
-    if let Some(parent) = PathBuf::from(path).parent() {
+    let path = validate_skill_path(path)?;
+    if let Some(parent) = path.parent() {
+        // Guard against deleting the skills root itself — only remove an
+        // individual skill folder nested under `.claude/skills/`.
+        let parent_norm = parent.to_string_lossy().replace('\\', "/");
+        if parent_norm.ends_with("/.claude/skills") || !parent_norm.contains("/.claude/skills/") {
+            return Err("Refusing to delete the skills root directory".to_string());
+        }
         fs::remove_dir_all(parent).map_err(|e| format!("Failed to delete skill: {}", e))?;
     }
     Ok(())

@@ -99,6 +99,11 @@ function handleStreamMessage(
       }
       break;
 
+    case 'stream_event':
+      // Incremental streaming deltas (--include-partial-messages).
+      handleStreamEvent(message, tabId, handlers);
+      break;
+
     case 'user': {
       // Echo of user message — content can be string or content-block array
       const userMsg = message.message as Record<string, unknown> | undefined;
@@ -127,19 +132,51 @@ function handleStreamMessage(
       break;
 
     case 'result':
-      // Session result (summary) — track token usage
-      {
-        const usage = (message as Record<string, unknown>).usage as Record<string, number> | undefined;
-        if (usage) {
-          useCreditStore.getState().updateFromStream(
-            usage.input_tokens || 0,
-            usage.output_tokens || 0,
-          );
-        }
-        handlers.setSessionStatus(tabId, 'completed');
-      }
+      // End of turn — clear any live partial and mark complete.
+      handlers.clearPartial(tabId);
+      handlers.setSessionStatus(tabId, 'completed');
       break;
 
+    default:
+      break;
+  }
+}
+
+/**
+ * Handle a `stream_event` line: the raw Anthropic SSE events surfaced by
+ * `--include-partial-messages`. This is where true incremental streaming
+ * happens — we append only the delta, never the accumulated text.
+ */
+function handleStreamEvent(
+  message: Record<string, unknown>,
+  tabId: string,
+  handlers: StreamHandlers,
+) {
+  const event = message.event as Record<string, unknown> | undefined;
+  if (!event) return;
+
+  switch (event.type as string | undefined) {
+    case 'content_block_delta': {
+      const delta = event.delta as Record<string, unknown> | undefined;
+      if (!delta) return;
+      if (delta.type === 'text_delta' && typeof delta.text === 'string') {
+        handlers.updatePartialMessage(tabId, delta.text);
+      } else if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string') {
+        handlers.updatePartialThinking(tabId, delta.thinking);
+      }
+      break;
+    }
+    case 'message_delta': {
+      // Authoritative token usage lives here, not on the `result` line.
+      const usage = event.usage as Record<string, number> | undefined;
+      if (usage) {
+        useCreditStore.getState().updateFromStream(
+          usage.input_tokens || 0,
+          usage.output_tokens || 0,
+        );
+      }
+      break;
+    }
     default:
       break;
   }
@@ -161,22 +198,29 @@ function handleAssistantMessage(
 
     switch (blockType) {
       case 'text': {
+        // The full assistant message is authoritative. The live partial
+        // already showed this text via stream_event deltas — replace it with
+        // a permanent message rather than appending (which would duplicate).
         const rawText = block.text;
         const text = typeof rawText === 'string' ? rawText
           : rawText ? String(rawText) : '';
         if (text) {
-          handlers.updatePartialMessage(tabId, text);
+          handlers.clearPartial(tabId);
+          handlers.addMessage(tabId, {
+            id: generateMessageId(),
+            role: 'assistant',
+            type: 'text',
+            content: text,
+            isPartial: false,
+            timestamp: Date.now(),
+          });
         }
         break;
       }
 
-      case 'thinking': {
-        const thinking = block.thinking as string | undefined;
-        if (thinking) {
-          handlers.updatePartialThinking(tabId, thinking);
-        }
+      case 'thinking':
+        // Thinking is shown live via the partial preview; no permanent record.
         break;
-      }
 
       case 'tool_use': {
         // Flush partial text before tool use
@@ -271,8 +315,10 @@ export async function sendMessage(
     return options.stdinId;
   }
 
-  // New session — start CLI process
-  const newStdinId = `session_${tabId}_${Date.now()}`;
+  // New session — start CLI process. Use a real UUID so the CLI persists a
+  // recognised, resumable transcript at ~/.claude/projects/<enc>/<uuid>.jsonl
+  // (passed through as --session-id by the backend).
+  const newStdinId = crypto.randomUUID();
   const result = await bridge.startSession({
     prompt,
     cwd: options.cwd,

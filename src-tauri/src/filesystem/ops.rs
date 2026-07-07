@@ -47,7 +47,8 @@ pub fn copy_file(src: &str, dest: &str) -> Result<(), String> {
         return Err(format!("Source not found: {}", src));
     }
     if src_path.is_dir() {
-        copy_dir_recursive(src_path, Path::new(dest))?;
+        let mut budget = CopyBudget { bytes: 0, files: 0 };
+        copy_dir_recursive(src_path, Path::new(dest), &mut budget)?;
     } else {
         if let Some(parent) = Path::new(dest).parent() {
             fs::create_dir_all(parent).map_err(|e| format!("Failed to create dest dir: {}", e))?;
@@ -57,15 +58,33 @@ pub fn copy_file(src: &str, dest: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<(), String> {
+// Bounds a recursive directory copy so a huge or pathological tree cannot fill
+// the disk or hang the app.
+const MAX_COPY_BYTES: u64 = 500 * 1024 * 1024; // 500 MB
+const MAX_COPY_FILES: u64 = 10_000;
+
+struct CopyBudget {
+    bytes: u64,
+    files: u64,
+}
+
+fn copy_dir_recursive(src: &Path, dest: &Path, budget: &mut CopyBudget) -> Result<(), String> {
     fs::create_dir_all(dest).map_err(|e| format!("Failed to create dest dir: {}", e))?;
     for entry in fs::read_dir(src).map_err(|e| format!("Failed to read dir: {}", e))? {
         let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
         let src_path = entry.path();
         let dest_path = dest.join(entry.file_name());
         if src_path.is_dir() {
-            copy_dir_recursive(&src_path, &dest_path)?;
+            copy_dir_recursive(&src_path, &dest_path, budget)?;
         } else {
+            budget.files += 1;
+            budget.bytes += entry.metadata().map(|m| m.len()).unwrap_or(0);
+            if budget.files > MAX_COPY_FILES {
+                return Err(format!("Copy aborted: exceeds {} files", MAX_COPY_FILES));
+            }
+            if budget.bytes > MAX_COPY_BYTES {
+                return Err("Copy aborted: exceeds 500MB limit".to_string());
+            }
             fs::copy(&src_path, &dest_path).map_err(|e| format!("Failed to copy: {}", e))?;
         }
     }

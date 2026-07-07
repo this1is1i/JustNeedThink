@@ -22,10 +22,9 @@ function FileTreeNode({ node, depth, selectedPath, onSelect, onDelete }: {
   return (
     <div>
       <div
-        className="group flex cursor-pointer items-center gap-1 rounded py-0.5 pr-1 text-sm transition-colors hover:opacity-90"
+        className={`jnt-row group mx-1 flex cursor-pointer items-center gap-1 rounded-md py-0.5 pr-1 text-sm ${selectedPath === node.path ? 'jnt-row-active' : ''}`}
         style={{
           paddingLeft: `${depth * 16 + 8}px`,
-          backgroundColor: selectedPath === node.path ? 'var(--color-surface)' : 'transparent',
           color: selectedPath === node.path ? 'var(--color-accent)' : 'var(--color-text-secondary)',
         }}
         onClick={() => {
@@ -95,18 +94,18 @@ export function FileExplorer({ tree, selectedPath, onSelect, onDelete, isLoading
   return (
     <div className="flex h-full flex-col">
       <div
-        className="border-b px-3 py-2 text-xs font-medium"
-        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}
+        className="px-3 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-wider"
+        style={{ color: 'var(--color-text-muted)' }}
       >
-        FILES
+        Files
       </div>
-      <div className="border-b px-2 py-1" style={{ borderColor: 'var(--color-border)' }}>
+      <div className="px-2 pb-1.5" style={{ borderColor: 'var(--color-border)' }}>
         <input
           type="text"
-          placeholder="Filter files..."
+          placeholder="Filter files…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="w-full rounded border px-2 py-1 text-xs outline-none"
+          className="w-full rounded-md border px-2.5 py-1 text-xs outline-none transition-colors focus:border-transparent"
           style={{
             backgroundColor: 'var(--color-bg)',
             borderColor: 'var(--color-border)',

@@ -67,13 +67,12 @@ export function CommandPalette() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[15%]"
-      style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+      className="jnt-backdrop fixed inset-0 z-50 flex items-start justify-center pt-[15%]"
       onClick={close}
     >
       <div
-        className="w-full max-w-lg overflow-hidden rounded-xl shadow-2xl"
-        style={{ backgroundColor: 'var(--color-surface)' }}
+        className="jnt-card jnt-gradient-border jnt-animate-in w-full max-w-lg overflow-hidden"
+        style={{ boxShadow: 'var(--shadow-lg)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search input */}
@@ -81,7 +80,7 @@ export function CommandPalette() {
           className="flex items-center gap-2 border-b px-4 py-3"
           style={{ borderColor: 'var(--color-border)' }}
         >
-          <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>⌘</span>
+          <span className="text-sm" style={{ color: 'var(--color-accent)' }}>⌘</span>
           <input
             ref={inputRef}
             type="text"
@@ -104,16 +103,18 @@ export function CommandPalette() {
             commands.map((cmd, i) => (
               <button
                 key={cmd.id}
-                className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm transition-colors"
+                className="mx-1.5 flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors"
                 style={{
+                  width: 'calc(100% - 0.75rem)',
                   backgroundColor: i === selectedIndex ? 'var(--color-surface-hover)' : 'transparent',
+                  boxShadow: i === selectedIndex ? 'inset 0 0 0 1px rgba(var(--color-accent-rgb),0.25)' : 'none',
                 }}
                 onMouseEnter={() => setSelectedIndex(i)}
                 onClick={() => executeCommand(cmd)}
               >
                 <span
-                  className="rounded px-1.5 py-0.5 text-xs"
-                  style={{ backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-accent)' }}
+                  className="jnt-chip px-1.5 py-0.5 text-[10px] font-medium"
+                  style={{ color: 'var(--color-accent)' }}
                 >
                   {cmd.category}
                 </span>

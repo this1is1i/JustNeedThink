@@ -1,3 +1,4 @@
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { python } from '@codemirror/lang-python';
@@ -38,6 +39,32 @@ function getLanguageExtension(path: string) {
 }
 
 export function FilePreview({ path, content, onSave }: FilePreviewProps) {
+  // Local draft — edits stay in memory until an explicit Save (avoids a disk
+  // write on every keystroke). Re-syncs whenever the loaded file changes.
+  const [draft, setDraft] = useState(content ?? '');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setDraft(content ?? '');
+  }, [path, content]);
+
+  // Compute the language extension once per file, not twice per render.
+  const langExtensions = useMemo(() => {
+    const ext = path ? getLanguageExtension(path) : undefined;
+    return ext ? [ext] : [];
+  }, [path]);
+
+  const dirty = content !== null && content !== undefined && draft !== content;
+
+  const handleSave = useCallback(async () => {
+    if (!path || !dirty) return;
+    setSaving(true);
+    try {
+      await onSave(path, draft);
+    } finally {
+      setSaving(false);
+    }
+  }, [path, draft, dirty, onSave]);
 
   if (!path) {
     return (
@@ -52,20 +79,31 @@ export function FilePreview({ path, content, onSave }: FilePreviewProps) {
   const isImage = /\.(png|jpg|jpeg|gif|svg|ico)$/i.test(path);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col"
+      onKeyDown={(e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+          e.preventDefault();
+          handleSave();
+        }
+      }}
+    >
       <div
         className="flex items-center justify-between border-b px-3 py-2 text-xs"
         style={{ borderColor: 'var(--color-border)' }}
       >
-        <span className="font-medium truncate" style={{ color: 'var(--color-text)' }}>
-          {fileName}
+        <span className="flex min-w-0 items-center gap-1.5 font-medium" style={{ color: 'var(--color-text)' }}>
+          {dirty && (
+            <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full"
+              style={{ backgroundColor: 'var(--color-warning)' }} title="Unsaved changes" />
+          )}
+          <span className="truncate">{fileName}</span>
         </span>
         <button
-          onClick={() => onSave(path, content || '')}
-          className="rounded px-2 py-0.5 text-xs transition-opacity hover:opacity-80"
-          style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-bg)' }}
+          onClick={handleSave}
+          disabled={!dirty || saving}
+          className="jnt-btn-accent px-2.5 py-0.5 text-xs"
         >
-          Save
+          {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
         </button>
       </div>
 
@@ -80,13 +118,11 @@ export function FilePreview({ path, content, onSave }: FilePreviewProps) {
           </div>
         ) : isText ? (
           <CodeMirror
-            value={content || ''}
-            extensions={getLanguageExtension(path) ? [getLanguageExtension(path)!] : []}
+            value={draft}
+            extensions={langExtensions}
             theme="dark"
             editable
-            onChange={(value) => {
-              onSave(path, value);
-            }}
+            onChange={setDraft}
             style={{ height: '100%', fontSize: '13px' }}
             basicSetup={{
               lineNumbers: true,
