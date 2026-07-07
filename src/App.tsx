@@ -1,7 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useChatStore } from './stores/chatStore';
+import { useFileStore } from './stores/fileStore';
 import { bridge, type CliStatus } from './lib/tauri-bridge';
 import { ChatPanel } from './components/chat/ChatPanel';
+import { FileExplorer } from './components/files/FileExplorer';
+import { FilePreview } from './components/files/FilePreview';
 
 // --- Error Boundary ---
 
@@ -88,7 +91,6 @@ function SetupWizard({ cliStatus, onRetry }: { cliStatus: CliStatus; onRetry: ()
     <div className="flex h-full items-center justify-center" style={{ backgroundColor: 'var(--color-bg)' }}>
       <div className="max-w-md rounded-lg p-8 text-center" style={{ backgroundColor: 'var(--color-surface)' }}>
         <h2 className="mb-4 text-xl font-bold" style={{ color: 'var(--color-text)' }}>Setup Required</h2>
-
         <div className="mb-4 space-y-2 text-left text-sm">
           <div className="flex items-center gap-2">
             <span>{cliStatus.installed ? '✅' : '❌'}</span>
@@ -103,13 +105,11 @@ function SetupWizard({ cliStatus, onRetry }: { cliStatus: CliStatus; onRetry: ()
             </span>
           </div>
         </div>
-
         {!cliStatus.installed && (
           <p className="mb-4 text-xs" style={{ color: 'var(--color-text-muted)' }}>
             Run <code className="rounded px-1" style={{ backgroundColor: 'var(--color-bg)' }}>npm install -g @anthropic-ai/claude-code</code> in a terminal, then retry.
           </p>
         )}
-
         <button
           onClick={onRetry}
           className="rounded px-6 py-2 text-sm font-medium"
@@ -130,12 +130,22 @@ function AppShell() {
   const [cliStatus, setCliStatus] = useState<CliStatus | null>(null);
   const [sessions, setSessions] = useState<SessionInfo[]>([DEFAULT_SESSION]);
   const [activeSession, setActiveSession] = useState<string>('main');
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
 
   const ensureTab = useChatStore((s) => s.ensureTab);
-  const sessionMeta = useChatStore((s) => {
-    const tab = s.tabs.get(activeSession);
-    return tab?.sessionMeta;
-  });
+  const sessionMeta = useChatStore((s) => s.tabs.get(activeSession)?.sessionMeta);
+
+  // File store
+  const fileTree = useFileStore((s) => s.tree);
+  const selectedFilePath = useFileStore((s) => s.selectedPath);
+  const previewContent = useFileStore((s) => s.previewContent);
+  const previewPath = useFileStore((s) => s.previewPath);
+  const fileTreeLoading = useFileStore((s) => s.isLoading);
+  const loadTree = useFileStore((s) => s.loadTree);
+  const selectFile = useFileStore((s) => s.selectFile);
+  const loadPreview = useFileStore((s) => s.loadPreview);
+  const deleteFile = useFileStore((s) => s.deleteFile);
+  const writeFile = useFileStore((s) => s.writeFile);
 
   // Check CLI on startup
   const checkCli = useCallback(async () => {
@@ -147,16 +157,14 @@ function AppShell() {
     }
   }, []);
 
-  useEffect(() => {
-    checkCli();
-  }, [checkCli]);
+  useEffect(() => { checkCli(); }, [checkCli]);
+
+  // Load file tree
+  useEffect(() => { loadTree(DEFAULT_CWD); }, [loadTree]);
 
   const handleNewSession = useCallback(() => {
     const id = `session_${Date.now()}`;
-    setSessions((prev) => [
-      ...prev,
-      { id, name: `Session ${prev.length}`, status: 'idle' },
-    ]);
+    setSessions((prev) => [...prev, { id, name: `Session ${prev.length}`, status: 'idle' }]);
     setActiveSession(id);
     ensureTab(id);
   }, [ensureTab]);
@@ -166,31 +174,31 @@ function AppShell() {
     ensureTab(id);
   }, [ensureTab]);
 
-  // Ensure the default tab exists
-  useEffect(() => {
-    ensureTab('main');
-  }, [ensureTab]);
+  const handleFileSelect = useCallback((path: string) => {
+    selectFile(path);
+    loadPreview(path);
+  }, [selectFile, loadPreview]);
+
+  const handleFileDelete = useCallback(async (path: string) => {
+    await deleteFile(path);
+  }, [deleteFile]);
+
+  const handleFileSave = useCallback(async (path: string, content: string) => {
+    await writeFile(path, content);
+  }, [writeFile]);
+
+  useEffect(() => { ensureTab('main'); }, [ensureTab]);
 
   // Update session status in sidebar
   useEffect(() => {
     if (!sessionMeta) return;
     const tab = useChatStore.getState().tabs.get(activeSession);
     if (!tab) return;
-
     const status = tab.sessionStatus === 'running' || tab.isStreaming
-      ? 'running'
-      : tab.sessionStatus === 'completed'
-        ? 'completed'
-        : 'idle';
-
-    setSessions((prev) =>
-      prev.map((s) =>
-        s.id === activeSession ? { ...s, status } : s,
-      ),
-    );
+      ? 'running' : tab.sessionStatus === 'completed' ? 'completed' : 'idle';
+    setSessions((prev) => prev.map((s) => s.id === activeSession ? { ...s, status } : s));
   }, [sessionMeta, activeSession]);
 
-  // Show setup wizard if CLI not available
   if (cliStatus && !cliStatus.installed) {
     return <SetupWizard cliStatus={cliStatus} onRetry={checkCli} />;
   }
@@ -204,25 +212,53 @@ function AppShell() {
         data-tauri-drag-region
       >
         <span className="font-medium" style={{ color: 'var(--color-text)' }}>JustNeedThink</span>
-        <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-          {cliStatus?.version ? `CLI ${cliStatus.version}` : 'v0.1.0'}
-        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setRightPanelOpen(!rightPanelOpen)}
+            className="rounded px-2 py-0.5 text-xs transition-opacity hover:opacity-80"
+            style={{ backgroundColor: 'var(--color-surface)', color: 'var(--color-text-secondary)' }}
+          >
+            {rightPanelOpen ? 'Hide Files' : 'Show Files'}
+          </button>
+          <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+            {cliStatus?.version ? `CLI ${cliStatus.version}` : 'v0.1.0'}
+          </span>
+        </div>
       </div>
 
       {/* Main layout */}
       <div className="flex flex-1 overflow-hidden">
-        <aside className="flex w-[240px] flex-col border-r" style={{ borderColor: 'var(--color-border)' }}>
-          <SessionSidebar
-            sessions={sessions}
-            activeId={activeSession}
-            onSelect={handleSelectSession}
-            onNew={handleNewSession}
-          />
+        <aside className="flex w-[220px] flex-col border-r" style={{ borderColor: 'var(--color-border)' }}>
+          <SessionSidebar sessions={sessions} activeId={activeSession} onSelect={handleSelectSession} onNew={handleNewSession} />
         </aside>
 
         <main className="flex flex-1 flex-col overflow-hidden">
           <ChatPanel tabId={activeSession} cwd={DEFAULT_CWD} />
         </main>
+
+        {rightPanelOpen && (
+          <aside className="flex w-[300px] flex-col border-l" style={{ borderColor: 'var(--color-border)' }}>
+            <div className="flex-1 overflow-hidden" style={{ backgroundColor: 'var(--color-bg-secondary)' }}>
+              <FileExplorer
+                tree={fileTree}
+                selectedPath={selectedFilePath}
+                onSelect={handleFileSelect}
+                onDelete={handleFileDelete}
+                isLoading={fileTreeLoading}
+              />
+            </div>
+            <div
+              className="flex h-[40%] flex-col border-t"
+              style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-bg-tertiary)' }}
+            >
+              <FilePreview
+                path={previewPath}
+                content={previewContent}
+                onSave={handleFileSave}
+              />
+            </div>
+          </aside>
+        )}
       </div>
 
       {/* Status bar */}

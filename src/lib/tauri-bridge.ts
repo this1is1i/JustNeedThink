@@ -26,6 +26,19 @@ export interface CliStatus {
   git_bash_available: boolean;
 }
 
+export interface FileNode {
+  name: string;
+  path: string;
+  isDir: boolean;
+  children: FileNode[] | null;
+}
+
+export interface FileChangeEvent {
+  kind: 'created' | 'modified' | 'removed';
+  paths: string[];
+  root: string;
+}
+
 // --- IPC Bridge ---
 
 export const bridge = {
@@ -44,6 +57,37 @@ export const bridge = {
 
   listActiveProcesses: (): Promise<string[]> =>
     invoke<string[]>('list_active_processes'),
+
+  // Filesystem
+  readFileTree: (path: string, depth?: number): Promise<FileNode[]> =>
+    invoke<FileNode[]>('read_file_tree', { path, depth }),
+
+  readFileContent: (path: string): Promise<string> =>
+    invoke<string>('read_file_content', { path }),
+
+  writeFileContent: (path: string, content: string): Promise<void> =>
+    invoke<void>('write_file_content', { path, content }),
+
+  copyFile: (src: string, dest: string): Promise<void> =>
+    invoke<void>('copy_file', { src, dest }),
+
+  renameFile: (src: string, dest: string): Promise<void> =>
+    invoke<void>('rename_file', { src, dest }),
+
+  deleteFile: (path: string): Promise<void> =>
+    invoke<void>('delete_file', { path }),
+
+  createDirectory: (path: string): Promise<void> =>
+    invoke<void>('create_directory', { path }),
+
+  getFileSize: (path: string): Promise<number> =>
+    invoke<number>('get_file_size', { path }),
+
+  watchDirectory: (path: string): Promise<void> =>
+    invoke<void>('watch_directory', { path }),
+
+  unwatchDirectory: (path: string): Promise<void> =>
+    invoke<void>('unwatch_directory', { path }),
 };
 
 // --- Event Listeners ---
@@ -66,6 +110,12 @@ export function onClaudeStderr(
     `claude:stderr:${stdinId}`,
     (event) => callback(event.payload),
   );
+}
+
+export function onFileChange(
+  callback: (event: FileChangeEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<FileChangeEvent>('fs:change', (event) => callback(event.payload));
 }
 
 export function onSessionExit(

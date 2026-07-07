@@ -1,14 +1,13 @@
 use crate::cli::env_builder::build_cli_env;
-use crate::cli::process_manager::{ManagedProcess, ProcessManager};
+use crate::cli::process_manager::ManagedProcess;
 use crate::cli::resolver::{find_claude_binary, needs_cmd_wrapper, CliBinary};
-use crate::cli::stdin_manager::StdinManager;
+use crate::AppState;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::Stdio;
 use tauri::{AppHandle, Emitter, State};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command as TokioCommand;
-use tokio::sync::Mutex as TokioMutex;
 
 // --- Types ---
 
@@ -36,24 +35,6 @@ pub struct CliStatus {
     pub path: Option<String>,
     pub version: Option<String>,
     pub git_bash_available: bool,
-}
-
-// --- Global State ---
-
-pub struct AppState {
-    pub process_manager: ProcessManager,
-    pub stdin_manager: StdinManager,
-    pub cli_binary: TokioMutex<Option<CliBinary>>,
-}
-
-impl AppState {
-    pub fn new() -> Self {
-        Self {
-            process_manager: ProcessManager::new(),
-            stdin_manager: StdinManager::new(),
-            cli_binary: TokioMutex::new(None),
-        }
-    }
 }
 
 // --- Tauri Commands ---
