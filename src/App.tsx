@@ -2,7 +2,9 @@ import { useState, useCallback, useEffect } from 'react';
 import { useChatStore } from './stores/chatStore';
 import { useFileStore } from './stores/fileStore';
 import { useProjectStore } from './stores/projectStore';
+import { useCreditStore } from './stores/creditStore';
 import { bridge, type CliStatus } from './lib/tauri-bridge';
+import { CreditIndicator } from './components/credits/CreditIndicator';
 import { ChatPanel } from './components/chat/ChatPanel';
 import { FileExplorer } from './components/files/FileExplorer';
 import { FilePreview } from './components/files/FilePreview';
@@ -131,7 +133,11 @@ function AppShell() {
   const deleteFile = useFileStore((s) => s.deleteFile);
   const writeFile = useFileStore((s) => s.writeFile);
 
-  // Sessions (simplified — per project)
+  // Credit store
+  const creditSummary = useCreditStore((s) => s.summary);
+  const fetchCreditSummary = useCreditStore((s) => s.fetchSummary);
+
+  // Sessions
   const [sessions, setSessions] = useState<SessionInfo[]>([
     { id: 'main', name: 'Main Session', status: 'idle' },
   ]);
@@ -141,7 +147,7 @@ function AppShell() {
     try { setCliStatus(await bridge.checkClaudeCli()); } catch { /* ignore */ }
   }, []);
 
-  useEffect(() => { checkCli(); }, [checkCli]);
+  useEffect(() => { checkCli(); fetchCreditSummary(); }, [checkCli, fetchCreditSummary]);
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
   useEffect(() => { ensureTab('main'); }, [ensureTab]);
 
@@ -260,11 +266,12 @@ function AppShell() {
         className="flex items-center justify-between border-t px-3 py-1 text-xs"
         style={{ backgroundColor: 'var(--color-bg-tertiary)', borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
       >
-        <span>
-          {cliStatus?.installed ? '✅ CLI ready' : '⏳ Checking...'}
-          {activeProject ? ` · 📁 ${activeProject.name}` : ''}
+        <span className="flex items-center gap-3">
+          <span>{cliStatus?.installed ? '✅' : '⏳'}</span>
+          {activeProject && <span>📁 {activeProject.name}</span>}
+          <CreditIndicator summary={creditSummary} />
         </span>
-        <span>JustNeedThink v0.2.0</span>
+        <span>v0.2.0</span>
       </div>
 
       {/* Project create dialog */}

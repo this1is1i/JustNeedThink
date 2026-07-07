@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { bridge, onClaudeStream, onClaudeStderr, onSessionExit } from '../lib/tauri-bridge';
 import { useChatStore, generateMessageId, type ChatMessage } from '../stores/chatStore';
+import { useCreditStore } from '../stores/creditStore';
 
 /**
  * Core hook: handles NDJSON stream messages from Claude CLI.
@@ -94,12 +95,17 @@ function handleStreamMessage(
       break;
 
     case 'result':
-      // Session result (summary)
-      handlers.setSessionStatus(tabId, 'completed');
-      break;
-
-    case 'error':
-      handlers.setSessionStatus(tabId, 'error');
+      // Session result (summary) — track token usage
+      {
+        const usage = (message as Record<string, unknown>).usage as Record<string, number> | undefined;
+        if (usage) {
+          useCreditStore.getState().updateFromStream(
+            usage.input_tokens || 0,
+            usage.output_tokens || 0,
+          );
+        }
+        handlers.setSessionStatus(tabId, 'completed');
+      }
       break;
 
     default:

@@ -1,4 +1,5 @@
 mod cli;
+mod credit;
 mod db;
 mod error;
 mod filesystem;
@@ -10,6 +11,7 @@ mod utils;
 use cli::process_manager::ProcessManager;
 use cli::stdin_manager::StdinManager;
 use cli::resolver::CliBinary;
+use credit::tracker::CreditTracker;
 use db::schema;
 use filesystem::watcher::WatcherManager;
 use rusqlite::Connection;
@@ -25,6 +27,7 @@ pub struct AppState {
     pub cli_binary: TokioMutex<Option<CliBinary>>,
     pub db: Arc<TokioMutex<Connection>>,
     pub watcher_manager: WatcherManager,
+    pub credit_tracker: CreditTracker,
 }
 
 impl AppState {
@@ -35,6 +38,7 @@ impl AppState {
             cli_binary: TokioMutex::new(None),
             db: Arc::new(TokioMutex::new(db)),
             watcher_manager: WatcherManager::new(),
+            credit_tracker: CreditTracker::new(),
         }
     }
 }
@@ -172,6 +176,19 @@ async fn list_project_sessions(
     Ok(all.into_iter().filter(|s| s.project_id.as_deref() == Some(&project_id)).collect())
 }
 
+// --- Credit Commands ---
+
+#[tauri::command]
+async fn get_credit_summary(state: State<'_, AppState>) -> Result<credit::tracker::CreditSummary, String> {
+    Ok(state.credit_tracker.get_summary().await)
+}
+
+#[tauri::command]
+async fn get_credit_history(state: State<'_, AppState>) -> Result<Vec<credit::usage_stats::DailyUsage>, String> {
+    let _ = state;
+    Ok(credit::usage_stats::get_daily_history())
+}
+
 // --- Run ---
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -218,6 +235,9 @@ pub fn run() {
             remove_project,
             touch_project,
             list_project_sessions,
+            // Credit
+            get_credit_summary,
+            get_credit_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

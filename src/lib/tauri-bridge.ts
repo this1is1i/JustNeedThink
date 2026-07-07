@@ -115,6 +115,13 @@ export const bridge = {
 
   listProjectSessions: (projectId: string): Promise<unknown[]> =>
     invoke<unknown[]>('list_project_sessions', { projectId }),
+
+  // Credit
+  getCreditSummary: (): Promise<import('../stores/creditStore').CreditSummary> =>
+    invoke<import('../stores/creditStore').CreditSummary>('get_credit_summary'),
+
+  getCreditHistory: (): Promise<unknown[]> =>
+    invoke<unknown[]>('get_credit_history'),
 };
 
 // --- Event Listeners ---
