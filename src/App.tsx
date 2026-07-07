@@ -8,6 +8,7 @@ import { CreditIndicator } from './components/credits/CreditIndicator';
 import { CommandPalette } from './components/commands/CommandPalette';
 import { AgentPanel } from './components/agents/AgentPanel';
 import { WorkflowPanel } from './components/workflows/WorkflowPanel';
+import { SkillsPanel } from './components/skills/SkillsPanel';
 import { ChatPanel } from './components/chat/ChatPanel';
 import { FileExplorer } from './components/files/FileExplorer';
 import { FilePreview } from './components/files/FilePreview';
@@ -110,7 +111,7 @@ function AppShell() {
   const [cliStatus, setCliStatus] = useState<CliStatus | null>(null);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [showNewProject, setShowNewProject] = useState(false);
-  const [rightTab, setRightTab] = useState<'files' | 'agents' | 'workflows'>('files');
+  const [rightTab, setRightTab] = useState<'files' | 'agents' | 'workflows' | 'skills'>('files');
 
   // Chat store
   const ensureTab = useChatStore((s) => s.ensureTab);
@@ -278,6 +279,15 @@ function AppShell() {
                   borderBottom: rightTab === 'workflows' ? '2px solid var(--color-accent)' : '2px solid transparent',
                 }}
               >Workflows</button>
+              <button
+                onClick={() => setRightTab('skills')}
+                className="flex-1 py-1.5 text-center"
+                style={{
+                  backgroundColor: rightTab === 'skills' ? 'var(--color-surface)' : 'transparent',
+                  color: rightTab === 'skills' ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                  borderBottom: rightTab === 'skills' ? '2px solid var(--color-accent)' : '2px solid transparent',
+                }}
+              >Skills</button>
             </div>
 
             {rightTab === 'files' ? (
@@ -299,9 +309,13 @@ function AppShell() {
               <div className="flex-1 overflow-hidden">
                 <AgentPanel />
               </div>
-            ) : (
+            ) : rightTab === 'workflows' ? (
               <div className="flex-1 overflow-hidden">
                 <WorkflowPanel />
+              </div>
+            ) : (
+              <div className="flex-1 overflow-hidden">
+                <SkillsPanel />
               </div>
             )}
           </aside>

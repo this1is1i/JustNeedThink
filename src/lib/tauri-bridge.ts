@@ -143,6 +143,16 @@ export const bridge = {
   // Workflows
   listWorkflows: (): Promise<import('../stores/workflowStore').WorkflowDefinition[]> =>
     invoke<import('../stores/workflowStore').WorkflowDefinition[]>('list_workflows'),
+
+  // Skills
+  listSkills: (projectDir?: string): Promise<import('../stores/skillStore').SkillInfo[]> =>
+    invoke<import('../stores/skillStore').SkillInfo[]>('list_skills', { projectDir: projectDir || null }),
+
+  readSkill: (path: string): Promise<string> =>
+    invoke<string>('read_skill', { path }),
+
+  writeSkill: (path: string, content: string): Promise<void> =>
+    invoke<void>('write_skill', { path, content }),
 };
 
 // --- Event Listeners ---

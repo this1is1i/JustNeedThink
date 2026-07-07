@@ -3,6 +3,7 @@ mod cli;
 mod commands;
 mod credit;
 mod db;
+mod skill;
 mod workflow;
 mod error;
 mod filesystem;
@@ -235,6 +236,23 @@ fn list_workflows() -> Result<Vec<workflow::engine::WorkflowDefinition>, String>
     Ok(workflow::engine::default_workflows())
 }
 
+// --- Skill Commands ---
+
+#[tauri::command]
+fn list_skills(project_dir: Option<String>) -> Result<Vec<skill::loader::SkillInfo>, String> {
+    Ok(skill::loader::list_skills(project_dir.as_deref()))
+}
+
+#[tauri::command]
+fn read_skill(path: String) -> Result<String, String> {
+    skill::loader::read_skill(&path)
+}
+
+#[tauri::command]
+fn write_skill(path: String, content: String) -> Result<(), String> {
+    skill::loader::write_skill(&path, &content)
+}
+
 // --- Run ---
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -293,6 +311,10 @@ pub fn run() {
             clear_agent_monitor,
             // Workflow
             list_workflows,
+            // Skills
+            list_skills,
+            read_skill,
+            write_skill,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
