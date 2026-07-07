@@ -26,6 +26,17 @@ export interface CliStatus {
   git_bash_available: boolean;
 }
 
+export interface ProjectInfo {
+  id: string;
+  name: string;
+  path: string;
+  lastOpenedAt: number;
+  createdAt: number;
+  sessionCount: number;
+  isArchived: boolean;
+  gitBranch: string | null;
+}
+
 export interface FileNode {
   name: string;
   path: string;
@@ -88,6 +99,22 @@ export const bridge = {
 
   unwatchDirectory: (path: string): Promise<void> =>
     invoke<void>('unwatch_directory', { path }),
+
+  // Projects
+  listProjects: (): Promise<ProjectInfo[]> =>
+    invoke<ProjectInfo[]>('list_projects'),
+
+  createProject: (name: string, path: string): Promise<ProjectInfo> =>
+    invoke<ProjectInfo>('create_project', { name, path }),
+
+  removeProject: (id: string): Promise<void> =>
+    invoke<void>('remove_project', { id }),
+
+  touchProject: (id: string): Promise<void> =>
+    invoke<void>('touch_project', { id }),
+
+  listProjectSessions: (projectId: string): Promise<unknown[]> =>
+    invoke<unknown[]>('list_project_sessions', { projectId }),
 };
 
 // --- Event Listeners ---

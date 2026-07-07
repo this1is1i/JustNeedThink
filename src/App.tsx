@@ -1,84 +1,23 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useChatStore } from './stores/chatStore';
 import { useFileStore } from './stores/fileStore';
+import { useProjectStore } from './stores/projectStore';
 import { bridge, type CliStatus } from './lib/tauri-bridge';
 import { ChatPanel } from './components/chat/ChatPanel';
 import { FileExplorer } from './components/files/FileExplorer';
 import { FilePreview } from './components/files/FilePreview';
+import { ProjectList } from './components/projects/ProjectList';
+import { ProjectCreateDialog } from './components/projects/ProjectCreateDialog';
 
 // --- Error Boundary ---
 
-interface ErrorFallbackProps {
-  error: Error;
-  onReset: () => void;
-}
-
-function ErrorFallback({ error, onReset }: ErrorFallbackProps) {
+function ErrorFallback({ error, onReset }: { error: Error; onReset: () => void }) {
   return (
     <div className="flex h-full items-center justify-center p-8" style={{ backgroundColor: 'var(--color-bg)' }}>
       <div className="max-w-md rounded-lg p-6 text-center" style={{ backgroundColor: 'var(--color-surface)' }}>
-        <h2 className="mb-2 text-lg font-semibold" style={{ color: 'var(--color-error)' }}>
-          Something went wrong
-        </h2>
+        <h2 className="mb-2 text-lg font-semibold" style={{ color: 'var(--color-error)' }}>Something went wrong</h2>
         <p className="mb-4 text-sm" style={{ color: 'var(--color-text-secondary)' }}>{error.message}</p>
-        <button
-          onClick={onReset}
-          className="rounded px-4 py-2 text-sm font-medium transition-colors"
-          style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-bg)' }}
-        >
-          Reload
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// --- Session Sidebar ---
-
-interface SessionInfo {
-  id: string;
-  name: string;
-  status: string;
-}
-
-const DEFAULT_SESSION: SessionInfo = { id: 'main', name: 'Main Session', status: 'idle' };
-
-function SessionSidebar({ sessions, activeId, onSelect, onNew }: {
-  sessions: SessionInfo[];
-  activeId: string;
-  onSelect: (id: string) => void;
-  onNew: () => void;
-}) {
-  return (
-    <div className="flex h-full flex-col" style={{ backgroundColor: 'var(--color-bg-secondary)' }}>
-      <div className="flex items-center justify-between border-b px-3 py-2" style={{ borderColor: 'var(--color-border)' }}>
-        <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>SESSIONS</span>
-        <button
-          onClick={onNew}
-          className="rounded px-2 py-0.5 text-xs font-medium"
-          style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-bg)' }}
-        >
-          + New
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto">
-        {sessions.map((s) => (
-          <button
-            key={s.id}
-            onClick={() => onSelect(s.id)}
-            className="w-full border-b px-3 py-2 text-left text-sm transition-colors"
-            style={{
-              backgroundColor: s.id === activeId ? 'var(--color-surface)' : 'transparent',
-              borderColor: 'var(--color-border)',
-              color: s.id === activeId ? 'var(--color-text)' : 'var(--color-text-secondary)',
-            }}
-          >
-            <div className="truncate">{s.name}</div>
-            <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-              {s.status === 'running' ? '⚡ Running' : s.status === 'completed' ? '✓ Done' : '○ Idle'}
-            </div>
-          </button>
-        ))}
+        <button onClick={onReset} className="rounded px-4 py-2 text-sm font-medium" style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-bg)' }}>Reload</button>
       </div>
     </div>
   );
@@ -95,7 +34,7 @@ function SetupWizard({ cliStatus, onRetry }: { cliStatus: CliStatus; onRetry: ()
           <div className="flex items-center gap-2">
             <span>{cliStatus.installed ? '✅' : '❌'}</span>
             <span style={{ color: 'var(--color-text-secondary)' }}>
-              Claude CLI {cliStatus.installed ? `found (${cliStatus.version || 'unknown version'})` : 'not found'}
+              Claude CLI {cliStatus.installed ? `found (${cliStatus.version || 'unknown'})` : 'not found'}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -110,13 +49,51 @@ function SetupWizard({ cliStatus, onRetry }: { cliStatus: CliStatus; onRetry: ()
             Run <code className="rounded px-1" style={{ backgroundColor: 'var(--color-bg)' }}>npm install -g @anthropic-ai/claude-code</code> in a terminal, then retry.
           </p>
         )}
-        <button
-          onClick={onRetry}
-          className="rounded px-6 py-2 text-sm font-medium"
-          style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-bg)' }}
-        >
-          Retry Detection
-        </button>
+        <button onClick={onRetry} className="rounded px-6 py-2 text-sm font-medium" style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-bg)' }}>Retry Detection</button>
+      </div>
+    </div>
+  );
+}
+
+// --- Session List (per project) ---
+
+interface SessionInfo {
+  id: string;
+  name: string;
+  status: string;
+}
+
+function SessionList({ sessions, activeId, onSelect, onNew }: {
+  sessions: SessionInfo[];
+  activeId: string;
+  onSelect: (id: string) => void;
+  onNew: () => void;
+}) {
+  return (
+    <div className="flex flex-col" style={{ backgroundColor: 'var(--color-bg-secondary)' }}>
+      <div className="flex items-center justify-between border-b px-3 py-1.5" style={{ borderColor: 'var(--color-border)' }}>
+        <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>SESSIONS</span>
+        <button onClick={onNew} className="rounded px-2 py-0.5 text-xs font-medium" style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-bg)' }}>+</button>
+      </div>
+      <div className="max-h-[200px] overflow-y-auto">
+        {sessions.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => onSelect(s.id)}
+            className="w-full border-b px-3 py-1.5 text-left text-sm transition-colors"
+            style={{
+              backgroundColor: s.id === activeId ? 'var(--color-surface)' : 'transparent',
+              borderColor: 'var(--color-border)',
+            }}
+          >
+            <div className="truncate text-xs" style={{ color: s.id === activeId ? 'var(--color-text)' : 'var(--color-text-secondary)' }}>
+              {s.name}
+            </div>
+            <div style={{ color: 'var(--color-text-muted)', fontSize: '10px' }}>
+              {s.status === 'running' ? '⚡ Running' : s.status === 'completed' ? '✓ Done' : '○ Idle'}
+            </div>
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -124,16 +101,23 @@ function SetupWizard({ cliStatus, onRetry }: { cliStatus: CliStatus; onRetry: ()
 
 // --- Main App ---
 
-const DEFAULT_CWD = 'D:\\AAWorkSpeace\\liteplay';
-
 function AppShell() {
   const [cliStatus, setCliStatus] = useState<CliStatus | null>(null);
-  const [sessions, setSessions] = useState<SessionInfo[]>([DEFAULT_SESSION]);
-  const [activeSession, setActiveSession] = useState<string>('main');
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [showNewProject, setShowNewProject] = useState(false);
 
+  // Chat store
   const ensureTab = useChatStore((s) => s.ensureTab);
-  const sessionMeta = useChatStore((s) => s.tabs.get(activeSession)?.sessionMeta);
+  const sessionMeta = useChatStore((s) => s.tabs.get('main')?.sessionMeta);
+
+  // Project store
+  const projects = useProjectStore((s) => s.projects);
+  const activeProjectId = useProjectStore((s) => s.activeProjectId);
+  const fetchProjects = useProjectStore((s) => s.fetchProjects);
+  const createProject = useProjectStore((s) => s.createProject);
+  const removeProject = useProjectStore((s) => s.removeProject);
+  const setActiveProject = useProjectStore((s) => s.setActiveProject);
+  const activeProject = useProjectStore((s) => s.getActiveProject());
 
   // File store
   const fileTree = useFileStore((s) => s.tree);
@@ -147,57 +131,57 @@ function AppShell() {
   const deleteFile = useFileStore((s) => s.deleteFile);
   const writeFile = useFileStore((s) => s.writeFile);
 
-  // Check CLI on startup
+  // Sessions (simplified — per project)
+  const [sessions, setSessions] = useState<SessionInfo[]>([
+    { id: 'main', name: 'Main Session', status: 'idle' },
+  ]);
+
+  // Init
   const checkCli = useCallback(async () => {
-    try {
-      const status = await bridge.checkClaudeCli();
-      setCliStatus(status);
-    } catch (err) {
-      console.error('Failed to check CLI:', err);
-    }
+    try { setCliStatus(await bridge.checkClaudeCli()); } catch { /* ignore */ }
   }, []);
 
   useEffect(() => { checkCli(); }, [checkCli]);
+  useEffect(() => { fetchProjects(); }, [fetchProjects]);
+  useEffect(() => { ensureTab('main'); }, [ensureTab]);
 
-  // Load file tree
-  useEffect(() => { loadTree(DEFAULT_CWD); }, [loadTree]);
+  // Load file tree for active project
+  useEffect(() => {
+    if (activeProject) {
+      loadTree(activeProject.path);
+    }
+  }, [activeProject, loadTree]);
+
+  // Session status sync
+  useEffect(() => {
+    if (!sessionMeta) return;
+    const tab = useChatStore.getState().tabs.get('main');
+    if (!tab) return;
+    const status = tab.sessionStatus === 'running' || tab.isStreaming
+      ? 'running' : tab.sessionStatus === 'completed' ? 'completed' : 'idle';
+    setSessions((prev) => prev.map((s) => s.id === 'main' ? { ...s, status } : s));
+  }, [sessionMeta]);
 
   const handleNewSession = useCallback(() => {
     const id = `session_${Date.now()}`;
     setSessions((prev) => [...prev, { id, name: `Session ${prev.length}`, status: 'idle' }]);
-    setActiveSession(id);
     ensureTab(id);
   }, [ensureTab]);
 
-  const handleSelectSession = useCallback((id: string) => {
-    setActiveSession(id);
-    ensureTab(id);
-  }, [ensureTab]);
+  const handleProjectSelect = useCallback(async (id: string) => {
+    await setActiveProject(id);
+  }, [setActiveProject]);
 
-  const handleFileSelect = useCallback((path: string) => {
-    selectFile(path);
-    loadPreview(path);
-  }, [selectFile, loadPreview]);
+  const handleProjectDelete = useCallback(async (id: string) => {
+    await removeProject(id);
+  }, [removeProject]);
 
-  const handleFileDelete = useCallback(async (path: string) => {
-    await deleteFile(path);
-  }, [deleteFile]);
+  const handleProjectCreate = useCallback(async (name: string, path: string) => {
+    const proj = await createProject(name, path);
+    loadTree(proj.path);
+  }, [createProject, loadTree]);
 
-  const handleFileSave = useCallback(async (path: string, content: string) => {
-    await writeFile(path, content);
-  }, [writeFile]);
-
-  useEffect(() => { ensureTab('main'); }, [ensureTab]);
-
-  // Update session status in sidebar
-  useEffect(() => {
-    if (!sessionMeta) return;
-    const tab = useChatStore.getState().tabs.get(activeSession);
-    if (!tab) return;
-    const status = tab.sessionStatus === 'running' || tab.isStreaming
-      ? 'running' : tab.sessionStatus === 'completed' ? 'completed' : 'idle';
-    setSessions((prev) => prev.map((s) => s.id === activeSession ? { ...s, status } : s));
-  }, [sessionMeta, activeSession]);
+  const cwd = activeProject?.path ?? 'D:\\AAWorkSpeace\\liteplay';
 
   if (cliStatus && !cliStatus.installed) {
     return <SetupWizard cliStatus={cliStatus} onRetry={checkCli} />;
@@ -215,47 +199,57 @@ function AppShell() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setRightPanelOpen(!rightPanelOpen)}
-            className="rounded px-2 py-0.5 text-xs transition-opacity hover:opacity-80"
+            className="rounded px-2 py-0.5 text-xs"
             style={{ backgroundColor: 'var(--color-surface)', color: 'var(--color-text-secondary)' }}
           >
             {rightPanelOpen ? 'Hide Files' : 'Show Files'}
           </button>
           <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-            {cliStatus?.version ? `CLI ${cliStatus.version}` : 'v0.1.0'}
+            {cliStatus?.version ? `CLI ${cliStatus.version}` : 'v0.2.0'}
           </span>
         </div>
       </div>
 
       {/* Main layout */}
       <div className="flex flex-1 overflow-hidden">
-        <aside className="flex w-[220px] flex-col border-r" style={{ borderColor: 'var(--color-border)' }}>
-          <SessionSidebar sessions={sessions} activeId={activeSession} onSelect={handleSelectSession} onNew={handleNewSession} />
+        {/* Left sidebar: projects + sessions */}
+        <aside className="flex w-[240px] flex-col border-r" style={{ borderColor: 'var(--color-border)' }}>
+          <ProjectList
+            projects={projects}
+            activeId={activeProjectId}
+            onSelect={handleProjectSelect}
+            onDelete={handleProjectDelete}
+            onNew={() => setShowNewProject(true)}
+          />
+          {activeProject && (
+            <SessionList
+              sessions={sessions}
+              activeId="main"
+              onSelect={() => {}}
+              onNew={handleNewSession}
+            />
+          )}
         </aside>
 
+        {/* Chat */}
         <main className="flex flex-1 flex-col overflow-hidden">
-          <ChatPanel tabId={activeSession} cwd={DEFAULT_CWD} />
+          <ChatPanel tabId="main" cwd={cwd} />
         </main>
 
+        {/* Right panel: files */}
         {rightPanelOpen && (
           <aside className="flex w-[300px] flex-col border-l" style={{ borderColor: 'var(--color-border)' }}>
             <div className="flex-1 overflow-hidden" style={{ backgroundColor: 'var(--color-bg-secondary)' }}>
               <FileExplorer
                 tree={fileTree}
                 selectedPath={selectedFilePath}
-                onSelect={handleFileSelect}
-                onDelete={handleFileDelete}
+                onSelect={(p) => { selectFile(p); loadPreview(p); }}
+                onDelete={(p) => { deleteFile(p); }}
                 isLoading={fileTreeLoading}
               />
             </div>
-            <div
-              className="flex h-[40%] flex-col border-t"
-              style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-bg-tertiary)' }}
-            >
-              <FilePreview
-                path={previewPath}
-                content={previewContent}
-                onSave={handleFileSave}
-              />
+            <div className="flex h-[40%] flex-col border-t" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-bg-tertiary)' }}>
+              <FilePreview path={previewPath} content={previewContent} onSave={(p, c) => writeFile(p, c)} />
             </div>
           </aside>
         )}
@@ -268,10 +262,18 @@ function AppShell() {
       >
         <span>
           {cliStatus?.installed ? '✅ CLI ready' : '⏳ Checking...'}
-          {cliStatus?.git_bash_available ? ' · bash ready' : ''}
+          {activeProject ? ` · 📁 ${activeProject.name}` : ''}
         </span>
-        <span>JustNeedThink v0.1.0</span>
+        <span>JustNeedThink v0.2.0</span>
       </div>
+
+      {/* Project create dialog */}
+      {showNewProject && (
+        <ProjectCreateDialog
+          onClose={() => setShowNewProject(false)}
+          onCreate={handleProjectCreate}
+        />
+      )}
     </div>
   );
 }
@@ -280,15 +282,6 @@ function AppShell() {
 
 export default function App() {
   const [error, setError] = useState<Error | null>(null);
-  const key = useState(() => Date.now())[0];
-
-  if (error) {
-    return <ErrorFallback error={error} onReset={() => setError(null)} />;
-  }
-
-  try {
-    return <AppShell key={key} />;
-  } catch (err) {
-    throw err;
-  }
+  if (error) return <ErrorFallback error={error} onReset={() => setError(null)} />;
+  try { return <AppShell key={Date.now()} />; } catch { return null; }
 }

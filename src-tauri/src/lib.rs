@@ -2,6 +2,7 @@ mod cli;
 mod db;
 mod error;
 mod filesystem;
+mod project;
 mod session;
 mod stream;
 mod utils;
@@ -130,6 +131,47 @@ async fn set_db_setting(state: State<'_, AppState>, key: String, value: String) 
     db::session_repo::set_setting(&db, &key, &value)
 }
 
+// --- Project Commands ---
+
+#[tauri::command]
+async fn list_projects(state: State<'_, AppState>) -> Result<Vec<project::registry::ProjectInfo>, String> {
+    let db = state.db.lock().await;
+    db::project_repo::list_projects(&db)
+}
+
+#[tauri::command]
+async fn create_project(state: State<'_, AppState>, name: String, path: String) -> Result<project::registry::ProjectInfo, String> {
+    let id = uuid::Uuid::new_v4().to_string();
+    let proj = project::registry::create_project(&id, &name, &path);
+    let db = state.db.lock().await;
+    db::project_repo::upsert_project(&db, &proj)?;
+    project::workspace::ensure_workspace(&path)?;
+    Ok(proj)
+}
+
+#[tauri::command]
+async fn remove_project(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let db = state.db.lock().await;
+    db::project_repo::delete_project(&db, &id)
+}
+
+#[tauri::command]
+async fn touch_project(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let db = state.db.lock().await;
+    db::project_repo::touch_project(&db, &id)
+}
+
+#[tauri::command]
+async fn list_project_sessions(
+    state: State<'_, AppState>,
+    project_id: String,
+) -> Result<Vec<db::session_repo::SessionRecord>, String> {
+    let db = state.db.lock().await;
+    // Reuse list_sessions but filter by project
+    let all = db::session_repo::list_sessions(&db)?;
+    Ok(all.into_iter().filter(|s| s.project_id.as_deref() == Some(&project_id)).collect())
+}
+
 // --- Run ---
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -170,6 +212,12 @@ pub fn run() {
             delete_db_session,
             get_db_setting,
             set_db_setting,
+            // Projects
+            list_projects,
+            create_project,
+            remove_project,
+            touch_project,
+            list_project_sessions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
