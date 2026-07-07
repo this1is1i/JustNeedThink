@@ -6,6 +6,7 @@ import { useCreditStore } from './stores/creditStore';
 import { bridge, type CliStatus } from './lib/tauri-bridge';
 import { CreditIndicator } from './components/credits/CreditIndicator';
 import { CommandPalette } from './components/commands/CommandPalette';
+import { AgentPanel } from './components/agents/AgentPanel';
 import { ChatPanel } from './components/chat/ChatPanel';
 import { FileExplorer } from './components/files/FileExplorer';
 import { FilePreview } from './components/files/FilePreview';
@@ -108,6 +109,7 @@ function AppShell() {
   const [cliStatus, setCliStatus] = useState<CliStatus | null>(null);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [showNewProject, setShowNewProject] = useState(false);
+  const [rightTab, setRightTab] = useState<'files' | 'agents'>('files');
 
   // Chat store
   const ensureTab = useChatStore((s) => s.ensureTab);
@@ -209,7 +211,7 @@ function AppShell() {
             className="rounded px-2 py-0.5 text-xs"
             style={{ backgroundColor: 'var(--color-surface)', color: 'var(--color-text-secondary)' }}
           >
-            {rightPanelOpen ? 'Hide Files' : 'Show Files'}
+            {rightPanelOpen ? 'Hide Panel' : 'Show Panel'}
           </button>
           <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
             {cliStatus?.version ? `CLI ${cliStatus.version}` : 'v0.2.0'}
@@ -246,18 +248,48 @@ function AppShell() {
         {/* Right panel: files */}
         {rightPanelOpen && (
           <aside className="flex w-[300px] flex-col border-l" style={{ borderColor: 'var(--color-border)' }}>
-            <div className="flex-1 overflow-hidden" style={{ backgroundColor: 'var(--color-bg-secondary)' }}>
-              <FileExplorer
-                tree={fileTree}
-                selectedPath={selectedFilePath}
-                onSelect={(p) => { selectFile(p); loadPreview(p); }}
-                onDelete={(p) => { deleteFile(p); }}
-                isLoading={fileTreeLoading}
-              />
+            {/* Tab selector */}
+            <div className="flex border-b text-xs" style={{ borderColor: 'var(--color-border)' }}>
+              <button
+                onClick={() => setRightTab('files')}
+                className="flex-1 py-1.5 text-center"
+                style={{
+                  backgroundColor: rightTab === 'files' ? 'var(--color-surface)' : 'transparent',
+                  color: rightTab === 'files' ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                  borderBottom: rightTab === 'files' ? '2px solid var(--color-accent)' : '2px solid transparent',
+                }}
+              >Files</button>
+              <button
+                onClick={() => setRightTab('agents')}
+                className="flex-1 py-1.5 text-center"
+                style={{
+                  backgroundColor: rightTab === 'agents' ? 'var(--color-surface)' : 'transparent',
+                  color: rightTab === 'agents' ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                  borderBottom: rightTab === 'agents' ? '2px solid var(--color-accent)' : '2px solid transparent',
+                }}
+              >Agents</button>
             </div>
-            <div className="flex h-[40%] flex-col border-t" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-bg-tertiary)' }}>
-              <FilePreview path={previewPath} content={previewContent} onSave={(p, c) => writeFile(p, c)} />
-            </div>
+
+            {rightTab === 'files' ? (
+              <>
+                <div className="flex-1 overflow-hidden" style={{ backgroundColor: 'var(--color-bg-secondary)' }}>
+                  <FileExplorer
+                    tree={fileTree}
+                    selectedPath={selectedFilePath}
+                    onSelect={(p) => { selectFile(p); loadPreview(p); }}
+                    onDelete={(p) => { deleteFile(p); }}
+                    isLoading={fileTreeLoading}
+                  />
+                </div>
+                <div className="flex h-[40%] flex-col border-t" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-bg-tertiary)' }}>
+                  <FilePreview path={previewPath} content={previewContent} onSave={(p, c) => writeFile(p, c)} />
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 overflow-hidden">
+                <AgentPanel />
+              </div>
+            )}
           </aside>
         )}
       </div>

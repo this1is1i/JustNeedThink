@@ -126,6 +126,19 @@ export const bridge = {
   // Commands
   listBuiltinCommands: (): Promise<import('../stores/commandStore').PaletteCommand[]> =>
     invoke<import('../stores/commandStore').PaletteCommand[]>('list_builtin_commands'),
+
+  // Agents
+  listAgents: (): Promise<import('../stores/agentStore').AgentDefinition[]> =>
+    invoke<import('../stores/agentStore').AgentDefinition[]>('list_agents'),
+
+  listAgentTeams: (): Promise<import('../stores/agentStore').AgentTeam[]> =>
+    invoke<import('../stores/agentStore').AgentTeam[]>('list_agent_teams'),
+
+  getAgentStatus: (): Promise<import('../stores/agentStore').AgentStatus[]> =>
+    invoke<import('../stores/agentStore').AgentStatus[]>('get_agent_status'),
+
+  clearAgentMonitor: (): Promise<void> =>
+    invoke<void>('clear_agent_monitor'),
 };
 
 // --- Event Listeners ---

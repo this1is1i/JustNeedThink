@@ -1,3 +1,4 @@
+mod agent;
 mod cli;
 mod commands;
 mod credit;
@@ -12,6 +13,8 @@ mod utils;
 use cli::process_manager::ProcessManager;
 use cli::stdin_manager::StdinManager;
 use cli::resolver::CliBinary;
+use agent::monitor::AgentMonitor;
+use agent::message_bus::AgentMessageBus;
 use credit::tracker::CreditTracker;
 use db::schema;
 use filesystem::watcher::WatcherManager;
@@ -29,6 +32,8 @@ pub struct AppState {
     pub db: Arc<TokioMutex<Connection>>,
     pub watcher_manager: WatcherManager,
     pub credit_tracker: CreditTracker,
+    pub agent_monitor: AgentMonitor,
+    pub agent_bus: AgentMessageBus,
 }
 
 impl AppState {
@@ -40,6 +45,8 @@ impl AppState {
             db: Arc::new(TokioMutex::new(db)),
             watcher_manager: WatcherManager::new(),
             credit_tracker: CreditTracker::new(),
+            agent_monitor: AgentMonitor::new(),
+            agent_bus: AgentMessageBus::new(),
         }
     }
 }
@@ -197,6 +204,29 @@ fn list_builtin_commands() -> Result<Vec<commands::builtin::BuiltinCommand>, Str
     Ok(commands::builtin::list_builtin_commands())
 }
 
+// --- Agent Commands ---
+
+#[tauri::command]
+fn list_agents() -> Result<Vec<agent::registry::AgentDefinition>, String> {
+    Ok(agent::registry::builtin_agents())
+}
+
+#[tauri::command]
+fn list_agent_teams() -> Result<Vec<agent::team::AgentTeam>, String> {
+    Ok(agent::team::list_default_teams())
+}
+
+#[tauri::command]
+async fn get_agent_status(state: State<'_, AppState>) -> Result<Vec<agent::monitor::AgentStatus>, String> {
+    Ok(state.agent_monitor.list_all().await)
+}
+
+#[tauri::command]
+async fn clear_agent_monitor(state: State<'_, AppState>) -> Result<(), String> {
+    state.agent_monitor.clear().await;
+    Ok(())
+}
+
 // --- Run ---
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -248,6 +278,11 @@ pub fn run() {
             get_credit_history,
             // Commands
             list_builtin_commands,
+            // Agents
+            list_agents,
+            list_agent_teams,
+            get_agent_status,
+            clear_agent_monitor,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
