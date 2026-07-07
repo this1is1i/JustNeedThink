@@ -303,7 +303,7 @@ function AppShell() {
                     isLoading={fileTreeLoading}
                   />
                 </div>
-                <div className="flex h-[40%] flex-col border-t" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-bg-tertiary)' }}>
+                <div className="flex h-[200px] flex-shrink-0 flex-col border-t" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-bg-tertiary)' }}>
                   <FilePreview path={previewPath} content={previewContent} onSave={(p, c) => writeFile(p, c)} />
                 </div>
               </>

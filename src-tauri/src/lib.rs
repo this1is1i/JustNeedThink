@@ -22,7 +22,7 @@ use db::schema;
 use filesystem::watcher::WatcherManager;
 use rusqlite::Connection;
 use std::sync::Arc;
-use tauri::{AppHandle, Manager, State, WindowEvent};
+use tauri::{AppHandle, Manager, State};
 use tokio::sync::Mutex as TokioMutex;
 
 // --- App State ---
@@ -258,8 +258,7 @@ pub fn run() {
         log::error!("Failed to open SQLite database — running without persistence");
     }
 
-    #[allow(unused_mut)]
-    let app = tauri::Builder::default()
+    tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
@@ -270,27 +269,6 @@ pub fn run() {
             } else {
                 log::warn!("Main window not found — app may be running headless");
             }
-
-            // Kill all active CLI processes on window close to prevent lingering consoles
-            let app_handle = app.handle().clone();
-            let window = app.get_webview_window("main").unwrap();
-            window.on_window_event(move |event| {
-                if let tauri::WindowEvent::Destroyed = event {
-                    let state = app_handle.state::<AppState>();
-                    let pm = state.process_manager.clone_arc();
-                    let sm = state.stdin_manager.clone();
-                    tokio::task::spawn(async move {
-                        let ids = pm.list_ids().await;
-                        for id in &ids {
-                            sm.remove(id).await;
-                            if let Some(proc) = pm.remove(id).await {
-                                let mut p = proc.lock().await;
-                                let _ = p.child.kill().await;
-                            }
-                        }
-                    });
-                }
-            });
 
             Ok(())
         })
@@ -341,10 +319,6 @@ pub fn run() {
             read_skill,
             write_skill,
         ])
-        .build(tauri::generate_context!())
-        .expect("error while building tauri application");
-
-    app.run(|_handle, event| {
-        if let tauri::RunEvent::Exit = event { /* final cleanup */ }
-    });
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }
