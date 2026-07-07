@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, Component } from 'react';
 import { useChatStore } from './stores/chatStore';
 import { useFileStore } from './stores/fileStore';
 import { useProjectStore } from './stores/projectStore';
@@ -351,8 +351,34 @@ function AppShell() {
 
 // --- Root ---
 
+// --- Proper Error Boundary using componentDidCatch ---
+
+class AppErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[AppErrorBoundary] Caught render error:', error.message, info.componentStack);
+  }
+
+  render() {
+    if (this.state.error) {
+      return <ErrorFallback error={this.state.error} onReset={() => this.setState({ error: null })} />;
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
-  const [error, setError] = useState<Error | null>(null);
-  if (error) return <ErrorFallback error={error} onReset={() => setError(null)} />;
-  try { return <AppShell />; } catch { return null; }
+  return (
+    <AppErrorBoundary>
+      <AppShell />
+    </AppErrorBoundary>
+  );
 }

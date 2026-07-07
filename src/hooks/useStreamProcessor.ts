@@ -33,19 +33,23 @@ export function useStreamProcessor(tabId: string, stdinId: string | null) {
 
     const cleanups: Array<() => void> = [];
 
-    // Main stream listener — guarded by activeRef
+    // Main stream listener — guarded by activeRef, wrapped in try-catch
     onClaudeStream(stdinId, (message: Record<string, unknown>) => {
       if (!activeRef.current) return;
-      const h = handlersRef.current;
-      handleStreamMessage(message, tabId, {
-        addMessage: h.addMessage,
-        updatePartialMessage: h.updatePartialMessage,
-        updatePartialThinking: h.updatePartialThinking,
-        clearPartial: h.clearPartial,
-        setSessionStatus: h.setSessionStatus,
-        setActivityStatus: h.setActivityStatus,
-        setSessionMeta: h.setSessionMeta,
-      });
+      try {
+        const h = handlersRef.current;
+        handleStreamMessage(message, tabId, {
+          addMessage: h.addMessage,
+          updatePartialMessage: h.updatePartialMessage,
+          updatePartialThinking: h.updatePartialThinking,
+          clearPartial: h.clearPartial,
+          setSessionStatus: h.setSessionStatus,
+          setActivityStatus: h.setActivityStatus,
+          setSessionMeta: h.setSessionMeta,
+        });
+      } catch (err) {
+        console.error('[stream] Message handler error:', err);
+      }
     }).then((unlisten) => cleanups.push(unlisten));
 
     // Stderr listener

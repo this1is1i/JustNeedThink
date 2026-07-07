@@ -259,11 +259,13 @@ fn build_claude_command(
         cmd.env(key, value);
     }
 
-    // Windows: hide console window
+    // Windows: hide all console windows for this process and its children
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        // CREATE_NO_WINDOW | DETACHED_PROCESS: prevents cmd.exe and all
+        // child processes (git, npm, etc.) from creating visible console windows
+        cmd.creation_flags(0x08000000 | 0x00000008);
     }
 
     Ok(cmd)
