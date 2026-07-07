@@ -63,6 +63,21 @@ pub async fn start_claude_session(
     state: State<'_, AppState>,
     params: StartSessionParams,
 ) -> Result<SessionInfo, String> {
+    // Validate cwd
+    let cwd_path = std::path::Path::new(&params.cwd);
+    if !cwd_path.exists() {
+        return Err(format!("Directory does not exist: {}", params.cwd));
+    }
+    if !cwd_path.is_dir() {
+        return Err(format!("Not a directory: {}", params.cwd));
+    }
+    // Reject system directories
+    let normalized = cwd_path.canonicalize().unwrap_or_else(|_| cwd_path.to_path_buf());
+    let normalized_str = normalized.display().to_string();
+    if normalized_str.starts_with(r"C:\Windows") || normalized_str.starts_with(r"C:\windows") {
+        return Err("Cannot use system directories as working directory".to_string());
+    }
+
     let cli = state
         .cli_binary
         .lock()
@@ -102,18 +117,23 @@ pub async fn start_claude_session(
         },
     ).await;
 
-    // Spawn stdout reader task
+    // Spawn stdout reader task (with cleanup on exit)
     let app_clone = app.clone();
-    let stdin_id_clone = stdin_id.clone();
+    let stdin_id_stdout = stdin_id.clone();
+    let pm = state.process_manager.clone_arc();
+    let sm = state.stdin_manager.clone();
     tokio::spawn(async move {
-        read_stdout_stream(app_clone, child_stdout, &stdin_id_clone).await;
+        read_stdout_stream(app_clone, child_stdout, &stdin_id_stdout).await;
+        // Cleanup on process exit
+        sm.remove(&stdin_id_stdout).await;
+        pm.remove(&stdin_id_stdout).await;
     });
 
     // Spawn stderr reader task
     let app_clone2 = app.clone();
-    let stdin_id_clone2 = stdin_id.clone();
+    let stdin_id_stderr = stdin_id.clone();
     tokio::spawn(async move {
-        read_stderr_stream(app_clone2, child_stderr, &stdin_id_clone2).await;
+        read_stderr_stream(app_clone2, child_stderr, &stdin_id_stderr).await;
     });
 
     // Send initial prompt
@@ -257,7 +277,20 @@ async fn read_stdout_stream(
     let reader = BufReader::new(stdout);
     let mut lines = reader.lines();
 
-    while let Ok(Some(line)) = lines.next_line().await {
+    // 30-minute inactivity timeout prevents hung readers
+    let timeout = tokio::time::Duration::from_secs(1800);
+
+    loop {
+        let line_result = tokio::time::timeout(timeout, lines.next_line()).await;
+        let line = match line_result {
+            Ok(Ok(Some(l))) => l,
+            Ok(Ok(None)) => break,        // EOF — normal exit
+            Ok(Err(_)) => break,           // Read error
+            Err(_elapsed) => {
+                log::warn!("[stdout:{}] Reader timed out after 30min of inactivity", stdin_id);
+                break;
+            }
+        };
         if line.trim().is_empty() {
             continue;
         }

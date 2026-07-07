@@ -31,7 +31,7 @@ pub struct AppState {
     pub process_manager: ProcessManager,
     pub stdin_manager: StdinManager,
     pub cli_binary: TokioMutex<Option<CliBinary>>,
-    pub db: Arc<TokioMutex<Connection>>,
+    pub db: Option<Arc<TokioMutex<Connection>>>,
     pub watcher_manager: WatcherManager,
     pub credit_tracker: CreditTracker,
     pub agent_monitor: AgentMonitor,
@@ -39,17 +39,28 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(db: Connection) -> Self {
+    pub fn new(db: Option<Connection>) -> Self {
         Self {
             process_manager: ProcessManager::new(),
             stdin_manager: StdinManager::new(),
             cli_binary: TokioMutex::new(None),
-            db: Arc::new(TokioMutex::new(db)),
+            db: db.map(|c| Arc::new(TokioMutex::new(c))),
             watcher_manager: WatcherManager::new(),
             credit_tracker: CreditTracker::new(),
             agent_monitor: AgentMonitor::new(),
             agent_bus: AgentMessageBus::new(),
         }
+    }
+
+    /// Run a closure with the DB connection, or return a friendly error.
+    async fn with_db<F, R>(&self, f: F) -> Result<R, String>
+    where
+        F: FnOnce(&Connection) -> Result<R, String>,
+    {
+        let arc = self.db.as_ref()
+            .ok_or_else(|| "Database is temporarily unavailable. Your data is safe — restart the app to retry.".to_string())?;
+        let db = arc.lock().await;
+        f(&db)
     }
 }
 
@@ -114,76 +125,61 @@ async fn unwatch_directory(state: State<'_, AppState>, path: String) -> Result<(
 
 #[tauri::command]
 async fn list_db_sessions(state: State<'_, AppState>) -> Result<Vec<db::session_repo::SessionRecord>, String> {
-    let db = state.db.lock().await;
-    db::session_repo::list_sessions(&db)
+    state.with_db(|db| db::session_repo::list_sessions(db)).await
 }
 
 #[tauri::command]
-async fn upsert_db_session(
-    state: State<'_, AppState>,
-    session: db::session_repo::SessionRecord,
-) -> Result<(), String> {
-    let db = state.db.lock().await;
-    db::session_repo::upsert_session(&db, &session)
+async fn upsert_db_session(state: State<'_, AppState>, session: db::session_repo::SessionRecord) -> Result<(), String> {
+    state.with_db(|db| db::session_repo::upsert_session(db, &session)).await
 }
 
 #[tauri::command]
 async fn delete_db_session(state: State<'_, AppState>, id: String) -> Result<(), String> {
-    let db = state.db.lock().await;
-    db::session_repo::delete_session(&db, &id)
+    state.with_db(|db| db::session_repo::delete_session(db, &id)).await
 }
 
 #[tauri::command]
 async fn get_db_setting(state: State<'_, AppState>, key: String) -> Result<Option<String>, String> {
-    let db = state.db.lock().await;
-    db::session_repo::get_setting(&db, &key)
+    state.with_db(|db| db::session_repo::get_setting(db, &key)).await
 }
 
 #[tauri::command]
 async fn set_db_setting(state: State<'_, AppState>, key: String, value: String) -> Result<(), String> {
-    let db = state.db.lock().await;
-    db::session_repo::set_setting(&db, &key, &value)
+    state.with_db(|db| db::session_repo::set_setting(db, &key, &value)).await
 }
 
 // --- Project Commands ---
 
 #[tauri::command]
 async fn list_projects(state: State<'_, AppState>) -> Result<Vec<project::registry::ProjectInfo>, String> {
-    let db = state.db.lock().await;
-    db::project_repo::list_projects(&db)
+    state.with_db(|db| db::project_repo::list_projects(db)).await
 }
 
 #[tauri::command]
 async fn create_project(state: State<'_, AppState>, name: String, path: String) -> Result<project::registry::ProjectInfo, String> {
     let id = uuid::Uuid::new_v4().to_string();
     let proj = project::registry::create_project(&id, &name, &path);
-    let db = state.db.lock().await;
-    db::project_repo::upsert_project(&db, &proj)?;
+    state.with_db(|db| db::project_repo::upsert_project(db, &proj)).await?;
     project::workspace::ensure_workspace(&path)?;
     Ok(proj)
 }
 
 #[tauri::command]
 async fn remove_project(state: State<'_, AppState>, id: String) -> Result<(), String> {
-    let db = state.db.lock().await;
-    db::project_repo::delete_project(&db, &id)
+    state.with_db(|db| db::project_repo::delete_project(db, &id)).await
 }
 
 #[tauri::command]
 async fn touch_project(state: State<'_, AppState>, id: String) -> Result<(), String> {
-    let db = state.db.lock().await;
-    db::project_repo::touch_project(&db, &id)
+    state.with_db(|db| db::project_repo::touch_project(db, &id)).await
 }
 
 #[tauri::command]
-async fn list_project_sessions(
-    state: State<'_, AppState>,
-    project_id: String,
-) -> Result<Vec<db::session_repo::SessionRecord>, String> {
-    let db = state.db.lock().await;
-    // Reuse list_sessions but filter by project
-    let all = db::session_repo::list_sessions(&db)?;
-    Ok(all.into_iter().filter(|s| s.project_id.as_deref() == Some(&project_id)).collect())
+async fn list_project_sessions(state: State<'_, AppState>, project_id: String) -> Result<Vec<db::session_repo::SessionRecord>, String> {
+    state.with_db(|db| {
+        let all = db::session_repo::list_sessions(db)?;
+        Ok(all.into_iter().filter(|s| s.project_id.as_deref() == Some(&project_id)).collect())
+    }).await
 }
 
 // --- Credit Commands ---
@@ -257,7 +253,10 @@ fn write_skill(path: String, content: String) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let db = schema::open_database().expect("Failed to open database");
+    let db = schema::open_database().ok();
+    if db.is_none() {
+        log::error!("Failed to open SQLite database — running without persistence");
+    }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -265,8 +264,11 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(AppState::new(db))
         .setup(|app| {
-            let _window = app.get_webview_window("main").unwrap();
-            log::info!("JustNeedThink started");
+            if let Some(window) = app.get_webview_window("main") {
+                log::info!("JustNeedThink started (window: {:?})", window.title());
+            } else {
+                log::warn!("Main window not found — app may be running headless");
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

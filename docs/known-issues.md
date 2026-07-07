@@ -289,3 +289,22 @@ if (options.stdinId) {
 | **总计** | **23** |
 
 **建议优先修复顺序**: C1 (panic) → C3 (资源泄漏) → H1 (unwrap) → H6 (多会话硬编码) → H3/H4 (路径安全) → C4 (竞态) → C2 (超时)
+
+---
+
+## 修复记录 (2026-07-07)
+
+| Issue | 状态 | 修复方式 |
+|-------|:---:|------|
+| C1: DB panic | ✅ | `AppState.db` 改为 `Option<>`，`with_db()` helper 返回友好错误，`run()` 中 `expect` → `ok()` |
+| C3: 进程清理 | ✅ | stdout reader 退出后调用 `sm.remove()` + `pm.remove()`，`ProcessManager::clone_arc()` |
+| H1: unwrap | ✅ | `get_webview_window("main").unwrap()` → `if let Some(window)` |
+| H6: 多会话 | ✅ | 新增 `activeSessionId` 状态，替换所有硬编码 `'main'` |
+| H3: 路径验证 | ✅ | `start_claude_session` 验证 cwd 存在/是目录/非系统目录 |
+| H4: 文件限制 | ✅ | `validate_path_not_system()` 阻止对 `C:\Windows` 的写/删操作 |
+| C4: 竞态 | ✅ | `activeRef` 守卫 + `handlersRef` 稳定引用，旧 effect 回调在 cleanup 后自动跳过 |
+| C2: 超时 | ✅ | stdout reader 30分钟无活动超时，通过 `tokio::time::timeout` 包装 |
+| L1: 硬编码路径 | ✅ | `D:\\AAWorkSpeace\\liteplay` → 空字符串 |
+| L2: key 滥用 | ✅ | 移除 `key={Date.now()}` |
+
+**已修复**: 10/23 (全部 CRITICAL + HIGH + 2 LOW)

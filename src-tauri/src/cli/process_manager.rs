@@ -42,4 +42,9 @@ impl ProcessManager {
         let map = self.processes.lock().await;
         map.keys().cloned().collect()
     }
+
+    /// Clone a shareable reference to this manager for use in spawned tasks.
+    pub fn clone_arc(&self) -> Self {
+        Self { processes: self.processes.clone() }
+    }
 }

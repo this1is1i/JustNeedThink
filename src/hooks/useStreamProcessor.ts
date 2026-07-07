@@ -8,38 +8,56 @@ import { useCreditStore } from '../stores/creditStore';
  * Routes messages between foreground and background tabs.
  */
 export function useStreamProcessor(tabId: string, stdinId: string | null) {
+  const activeRef = useRef(true);
   const unlistenRef = useRef<Array<() => void>>([]);
-  const addMessage = useChatStore((s) => s.addMessage);
-  const updatePartialMessage = useChatStore((s) => s.updatePartialMessage);
-  const updatePartialThinking = useChatStore((s) => s.updatePartialThinking);
-  const clearPartial = useChatStore((s) => s.clearPartial);
-  const setSessionStatus = useChatStore((s) => s.setSessionStatus);
-  const setActivityStatus = useChatStore((s) => s.setActivityStatus);
-  const setSessionMeta = useChatStore((s) => s.setSessionMeta);
+
+  // Mark effect as inactive on cleanup — prevents stale callbacks
+  useEffect(() => {
+    activeRef.current = true;
+    return () => { activeRef.current = false; };
+  }, [stdinId, tabId]);
+
+  // Stable store ref for callbacks that are registered once but called many times
+  const handlersRef = useRef({
+    addMessage: useChatStore.getState().addMessage,
+    updatePartialMessage: useChatStore.getState().updatePartialMessage,
+    updatePartialThinking: useChatStore.getState().updatePartialThinking,
+    clearPartial: useChatStore.getState().clearPartial,
+    setSessionStatus: useChatStore.getState().setSessionStatus,
+    setActivityStatus: useChatStore.getState().setActivityStatus,
+    setSessionMeta: useChatStore.getState().setSessionMeta,
+  });
 
   useEffect(() => {
     if (!stdinId) return;
 
     const cleanups: Array<() => void> = [];
 
-    // Main stream listener
-    onClaudeStream(stdinId, (message) => {
-      handleStreamMessage(
-        message,
-        tabId,
-        { addMessage, updatePartialMessage, updatePartialThinking, clearPartial, setSessionStatus, setActivityStatus, setSessionMeta },
-      );
+    // Main stream listener — guarded by activeRef
+    onClaudeStream(stdinId, (message: Record<string, unknown>) => {
+      if (!activeRef.current) return;
+      const h = handlersRef.current;
+      handleStreamMessage(message, tabId, {
+        addMessage: h.addMessage,
+        updatePartialMessage: h.updatePartialMessage,
+        updatePartialThinking: h.updatePartialThinking,
+        clearPartial: h.clearPartial,
+        setSessionStatus: h.setSessionStatus,
+        setActivityStatus: h.setActivityStatus,
+        setSessionMeta: h.setSessionMeta,
+      });
     }).then((unlisten) => cleanups.push(unlisten));
 
     // Stderr listener
-    onClaudeStderr(stdinId, (line) => {
+    onClaudeStderr(stdinId, (line: string) => {
+      if (!activeRef.current) return;
       console.warn(`[stderr:${stdinId}]`, line);
     }).then((unlisten) => cleanups.push(unlisten));
 
     // Exit listener
-    onSessionExit(stdinId, (code) => {
-      console.log(`[exit:${stdinId}] code=${code}`);
-      setSessionStatus(tabId, code === 0 ? 'completed' : 'error');
+    onSessionExit(stdinId, (code: number | null) => {
+      if (!activeRef.current) return;
+      handlersRef.current.setSessionStatus(tabId, code === 0 ? 'completed' : 'error');
     }).then((unlisten) => cleanups.push(unlisten));
 
     unlistenRef.current = cleanups;

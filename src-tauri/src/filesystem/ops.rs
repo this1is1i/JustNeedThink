@@ -1,6 +1,16 @@
 use std::fs;
 use std::path::Path;
 
+/// Reject paths pointing to sensitive system directories.
+fn validate_path_not_system(path: &str) -> Result<(), String> {
+    let normalized = Path::new(path).canonicalize().unwrap_or_else(|_| Path::new(path).to_path_buf());
+    let s = normalized.display().to_string().to_lowercase();
+    if s.starts_with(r"c:\windows") || s.starts_with(r"c:\windows\system32") {
+        return Err("Access denied: cannot modify system directories".to_string());
+    }
+    Ok(())
+}
+
 /// Read file content as UTF-8 string.
 pub fn read_file_content(path: &str) -> Result<String, String> {
     let path = Path::new(path);
@@ -20,6 +30,7 @@ pub fn read_file_content(path: &str) -> Result<String, String> {
 
 /// Write content to a file (creates if not exists).
 pub fn write_file_content(path: &str, content: &str) -> Result<(), String> {
+    validate_path_not_system(path)?;
     let path = Path::new(path);
     if let Some(parent) = path.parent() {
         if !parent.exists() {
@@ -73,6 +84,7 @@ pub fn rename_file(src: &str, dest: &str) -> Result<(), String> {
 
 /// Delete a file or directory (recursive for directories).
 pub fn delete_file(path: &str) -> Result<(), String> {
+    validate_path_not_system(path)?;
     let path = Path::new(path);
     if !path.exists() {
         return Err(format!("Not found: {}", path.display()));

@@ -114,8 +114,9 @@ function AppShell() {
   const [rightTab, setRightTab] = useState<'files' | 'agents' | 'workflows' | 'skills'>('files');
 
   // Chat store
+  const [activeSessionId, setActiveSessionId] = useState<string>('main');
   const ensureTab = useChatStore((s) => s.ensureTab);
-  const sessionMeta = useChatStore((s) => s.tabs.get('main')?.sessionMeta);
+  const sessionMeta = useChatStore((s) => s.tabs.get(activeSessionId)?.sessionMeta);
 
   // Project store
   const projects = useProjectStore((s) => s.projects);
@@ -154,7 +155,7 @@ function AppShell() {
 
   useEffect(() => { checkCli(); fetchCreditSummary(); }, [checkCli, fetchCreditSummary]);
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
-  useEffect(() => { ensureTab('main'); }, [ensureTab]);
+  useEffect(() => { ensureTab(activeSessionId); }, [ensureTab, activeSessionId]);
 
   // Load file tree for active project
   useEffect(() => {
@@ -166,17 +167,18 @@ function AppShell() {
   // Session status sync
   useEffect(() => {
     if (!sessionMeta) return;
-    const tab = useChatStore.getState().tabs.get('main');
+    const tab = useChatStore.getState().tabs.get(activeSessionId);
     if (!tab) return;
     const status = tab.sessionStatus === 'running' || tab.isStreaming
       ? 'running' : tab.sessionStatus === 'completed' ? 'completed' : 'idle';
-    setSessions((prev) => prev.map((s) => s.id === 'main' ? { ...s, status } : s));
-  }, [sessionMeta]);
+    setSessions((prev) => prev.map((s) => s.id === activeSessionId ? { ...s, status } : s));
+  }, [sessionMeta, activeSessionId]);
 
   const handleNewSession = useCallback(() => {
     const id = `session_${Date.now()}`;
     setSessions((prev) => [...prev, { id, name: `Session ${prev.length}`, status: 'idle' }]);
     ensureTab(id);
+    setActiveSessionId(id);
   }, [ensureTab]);
 
   const handleProjectSelect = useCallback(async (id: string) => {
@@ -192,7 +194,7 @@ function AppShell() {
     loadTree(proj.path);
   }, [createProject, loadTree]);
 
-  const cwd = activeProject?.path ?? 'D:\\AAWorkSpeace\\liteplay';
+  const cwd = activeProject?.path ?? '';
 
   if (cliStatus && !cliStatus.installed) {
     return <SetupWizard cliStatus={cliStatus} onRetry={checkCli} />;
@@ -235,8 +237,8 @@ function AppShell() {
           {activeProject && (
             <SessionList
               sessions={sessions}
-              activeId="main"
-              onSelect={() => {}}
+              activeId={activeSessionId}
+              onSelect={(id) => { setActiveSessionId(id); ensureTab(id); }}
               onNew={handleNewSession}
             />
           )}
@@ -244,7 +246,7 @@ function AppShell() {
 
         {/* Chat */}
         <main className="flex flex-1 flex-col overflow-hidden">
-          <ChatPanel tabId="main" cwd={cwd} />
+          <ChatPanel tabId={activeSessionId} cwd={cwd} />
         </main>
 
         {/* Right panel: files */}
@@ -352,5 +354,5 @@ function AppShell() {
 export default function App() {
   const [error, setError] = useState<Error | null>(null);
   if (error) return <ErrorFallback error={error} onReset={() => setError(null)} />;
-  try { return <AppShell key={Date.now()} />; } catch { return null; }
+  try { return <AppShell />; } catch { return null; }
 }
