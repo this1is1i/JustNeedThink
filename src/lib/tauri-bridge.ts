@@ -139,6 +139,10 @@ export const bridge = {
 
   clearAgentMonitor: (): Promise<void> =>
     invoke<void>('clear_agent_monitor'),
+
+  // Workflows
+  listWorkflows: (): Promise<import('../stores/workflowStore').WorkflowDefinition[]> =>
+    invoke<import('../stores/workflowStore').WorkflowDefinition[]>('list_workflows'),
 };
 
 // --- Event Listeners ---

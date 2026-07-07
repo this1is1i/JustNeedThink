@@ -3,6 +3,7 @@ mod cli;
 mod commands;
 mod credit;
 mod db;
+mod workflow;
 mod error;
 mod filesystem;
 mod project;
@@ -227,6 +228,13 @@ async fn clear_agent_monitor(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
+// --- Workflow Commands ---
+
+#[tauri::command]
+fn list_workflows() -> Result<Vec<workflow::engine::WorkflowDefinition>, String> {
+    Ok(workflow::engine::default_workflows())
+}
+
 // --- Run ---
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -283,6 +291,8 @@ pub fn run() {
             list_agent_teams,
             get_agent_status,
             clear_agent_monitor,
+            // Workflow
+            list_workflows,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

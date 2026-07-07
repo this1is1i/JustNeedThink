@@ -7,6 +7,7 @@ import { bridge, type CliStatus } from './lib/tauri-bridge';
 import { CreditIndicator } from './components/credits/CreditIndicator';
 import { CommandPalette } from './components/commands/CommandPalette';
 import { AgentPanel } from './components/agents/AgentPanel';
+import { WorkflowPanel } from './components/workflows/WorkflowPanel';
 import { ChatPanel } from './components/chat/ChatPanel';
 import { FileExplorer } from './components/files/FileExplorer';
 import { FilePreview } from './components/files/FilePreview';
@@ -109,7 +110,7 @@ function AppShell() {
   const [cliStatus, setCliStatus] = useState<CliStatus | null>(null);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [showNewProject, setShowNewProject] = useState(false);
-  const [rightTab, setRightTab] = useState<'files' | 'agents'>('files');
+  const [rightTab, setRightTab] = useState<'files' | 'agents' | 'workflows'>('files');
 
   // Chat store
   const ensureTab = useChatStore((s) => s.ensureTab);
@@ -268,6 +269,15 @@ function AppShell() {
                   borderBottom: rightTab === 'agents' ? '2px solid var(--color-accent)' : '2px solid transparent',
                 }}
               >Agents</button>
+              <button
+                onClick={() => setRightTab('workflows')}
+                className="flex-1 py-1.5 text-center"
+                style={{
+                  backgroundColor: rightTab === 'workflows' ? 'var(--color-surface)' : 'transparent',
+                  color: rightTab === 'workflows' ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                  borderBottom: rightTab === 'workflows' ? '2px solid var(--color-accent)' : '2px solid transparent',
+                }}
+              >Workflows</button>
             </div>
 
             {rightTab === 'files' ? (
@@ -285,9 +295,13 @@ function AppShell() {
                   <FilePreview path={previewPath} content={previewContent} onSave={(p, c) => writeFile(p, c)} />
                 </div>
               </>
-            ) : (
+            ) : rightTab === 'agents' ? (
               <div className="flex-1 overflow-hidden">
                 <AgentPanel />
+              </div>
+            ) : (
+              <div className="flex-1 overflow-hidden">
+                <WorkflowPanel />
               </div>
             )}
           </aside>
