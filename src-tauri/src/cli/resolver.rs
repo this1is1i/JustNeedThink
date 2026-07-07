@@ -51,26 +51,19 @@ fn find_npm_global_claude() -> Option<CliBinary> {
         })
         .map(|s| s.trim().to_string());
 
+    let bin_name = npm_claude_binary_name();
     if let Some(prefix) = npm_prefix {
-        let candidate = PathBuf::from(&prefix).join("bin").join(claude_binary_name());
+        let candidate = PathBuf::from(&prefix).join("bin").join(bin_name);
         if candidate.exists() {
-            return Some(CliBinary {
-                version: get_version(&candidate),
-                path: candidate,
-                source: CliSource::NpmGlobal,
-            });
+            return Some(CliBinary { version: get_version(&candidate), path: candidate, source: CliSource::NpmGlobal });
         }
     }
 
     // Also try %APPDATA%/npm on Windows
     if let Ok(appdata) = std::env::var("APPDATA") {
-        let candidate = PathBuf::from(&appdata).join("npm").join(claude_binary_name());
+        let candidate = PathBuf::from(&appdata).join("npm").join(bin_name);
         if candidate.exists() {
-            return Some(CliBinary {
-                version: get_version(&candidate),
-                path: candidate,
-                source: CliSource::NpmGlobal,
-            });
+            return Some(CliBinary { version: get_version(&candidate), path: candidate, source: CliSource::NpmGlobal });
         }
     }
 
@@ -79,7 +72,7 @@ fn find_npm_global_claude() -> Option<CliBinary> {
 
 fn find_app_local_claude() -> Option<CliBinary> {
     let app_dir = dirs::data_local_dir()?.join("JustNeedThink").join("cli");
-    let candidate = app_dir.join(claude_binary_name());
+    let candidate = app_dir.join(npm_claude_binary_name());
     if candidate.exists() {
         return Some(CliBinary {
             version: get_version(&candidate),
@@ -91,7 +84,7 @@ fn find_app_local_claude() -> Option<CliBinary> {
 }
 
 fn find_system_claude() -> Option<CliBinary> {
-    let name = claude_binary_name();
+    let name = sys_claude_binary_name();
     // Use `where` on Windows, `which` on Unix
     let cmd = if cfg!(target_os = "windows") {
         std::process::Command::new("where")
@@ -152,12 +145,15 @@ pub fn needs_cmd_wrapper(path: &str) -> bool {
 }
 
 /// Get the OS-appropriate claude binary name.
-fn claude_binary_name() -> &'static str {
-    if cfg!(target_os = "windows") {
-        "claude.cmd"
-    } else {
-        "claude"
-    }
+/// Name used by npm global installs on Windows (shim files).
+fn npm_claude_binary_name() -> &'static str {
+    if cfg!(target_os = "windows") { "claude.cmd" } else { "claude" }
+}
+
+/// Name used by system PATH search on Windows.
+/// `where claude` matches claude.exe, claude.cmd, claude.bat.
+fn sys_claude_binary_name() -> &'static str {
+    "claude"
 }
 
 #[cfg(test)]
