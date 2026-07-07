@@ -34,8 +34,8 @@
 - [x] **Phase 4** — Credit 追踪 (4a82729)
 - [x] **Phase 5** — 命令面板 (79425cb)
 - [x] **Phase 6** — Agent 协作 (0843c5c)
-- [ ] **Phase 7** — Workflow ← 下一步
-- [ ] **Phase 8** — Skill + 打包
+- [x] **Phase 7** — Workflow (6a7c44c)
+- [ ] **Phase 8** — Skill + 打包 ← 下一步
 
 ## 已实现模块
 
