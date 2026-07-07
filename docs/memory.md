@@ -27,16 +27,19 @@
 
 ## 当前进度
 
-- [x] **Phase 0** — 脚手架 (提交 ab9d4ff)
-- [x] **Phase 1** — CLI 集成 + 基础聊天 (提交 26335f7 + b177380)
-- [x] **Phase 3** — 多项目系统 (提交 75d962f)
-- [x] **Phase 4** — Credit 追踪 (提交 4a82729)
-- [x] **Phase 5** — 命令面板 + 快捷键 (提交 79425cb)
-- [ ] **Phase 6** — Agent 管理 + 协作 ← 下一步
+- [x] **Phase 0** — 脚手架 (ab9d4ff)
+- [x] **Phase 1** — CLI 集成 + 聊天 (26335f7)
+- [x] **Phase 2** — 文件系统 + SQLite (c341c72)
+- [x] **Phase 3** — 多项目系统 (75d962f)
+- [x] **Phase 4** — Credit 追踪 (4a82729)
+- [x] **Phase 5** — 命令面板 (79425cb)
+- [x] **Phase 6** — Agent 协作 (0843c5c)
+- [ ] **Phase 7** — Workflow ← 下一步
+- [ ] **Phase 8** — Skill + 打包
 
 ## 已实现模块
 
-### Rust 后端 (22 个 .rs 文件)
+### Rust 后端 (34 个 .rs 文件, 27 个 Tauri 命令)
 
 ```
 src-tauri/src/
