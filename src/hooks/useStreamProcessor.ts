@@ -66,7 +66,13 @@ export function useStreamProcessor(tabId: string, stdinId: string | null) {
 
     register(onSessionExit(stdinId, (code: number | null) => {
       if (cancelled) return;
+      const tab = useChatStore.getState().tabs.get(tabId);
+      const sessionId = tab?.sessionMeta.sessionId;
       handlersRef.current.setSessionStatus(tabId, code === 0 ? 'completed' : 'error');
+      handlersRef.current.setSessionMeta(tabId, {
+        stdinId: undefined,
+        resumeSessionId: sessionId,
+      });
     }));
 
     register(onClaudePermission(stdinId, (request) => {
@@ -310,6 +316,7 @@ export async function sendMessage(
     stdinId?: string | null;
     cwd: string;
     sessionId?: string;
+    resumeSessionId?: string;
     model?: string;
     thinkingLevel?: string;
     permissionMode?: string;
@@ -336,15 +343,18 @@ export async function sendMessage(
     return options.stdinId;
   }
 
-  // New session — start CLI process. Use a real UUID so the CLI persists a
-  // recognised, resumable transcript at ~/.claude/projects/<enc>/<uuid>.jsonl
-  // (passed through as --session-id by the backend).
-  const newStdinId = options.sessionId ?? crypto.randomUUID();
+  // New runtime process. For brand-new chats this can also become the CLI
+  // transcript id; for resumed chats it must be distinct from the historical
+  // transcript id because the CLI rejects `--session-id` for an existing file.
+  const newStdinId = options.resumeSessionId
+    ? crypto.randomUUID()
+    : options.sessionId ?? crypto.randomUUID();
   const result = await bridge.startSession({
     prompt,
     cwd: options.cwd,
     model: options.model,
     session_id: newStdinId,
+    resume_session_id: options.resumeSessionId,
     thinking_level: options.thinkingLevel,
     permission_mode: options.permissionMode,
   });
@@ -352,6 +362,7 @@ export async function sendMessage(
   chatStore.setSessionMeta(tabId, {
     stdinId: newStdinId,
     sessionId: result.session_id,
+    resumeSessionId: undefined,
   });
 
   return newStdinId;

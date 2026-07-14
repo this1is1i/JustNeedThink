@@ -16,7 +16,10 @@ pub struct StartSessionParams {
     pub prompt: String,
     pub cwd: String,
     pub model: Option<String>,
+    /// Runtime id used for stdin routing and Tauri event names.
     pub session_id: String,
+    /// Existing CLI transcript id to resume, when continuing a disk session.
+    pub resume_session_id: Option<String>,
     pub thinking_level: Option<String>,
     pub permission_mode: Option<String>,
     pub context_window: Option<u32>,
@@ -181,7 +184,7 @@ pub async fn start_claude_session(
         .await?;
 
     Ok(SessionInfo {
-        session_id: params.session_id,
+        session_id: params.resume_session_id.unwrap_or(params.session_id),
         pid,
         cli_path: cli.path.display().to_string(),
     })
@@ -285,12 +288,17 @@ fn build_claude_command(
     // Working directory
     cmd.current_dir(&params.cwd);
 
-    // Session id — use our own UUID so the on-disk transcript
-    // (~/.claude/projects/<enc>/<session_id>.jsonl) is a first-class, resumable
-    // session that Claude Code CLI recognises, and that we can correlate with
-    // our UI session. Only pass it when it looks like a UUID (the CLI rejects
-    // non-UUID ids); older non-UUID ids fall back to CLI-generated ones.
-    if is_uuid(&params.session_id) {
+    // For existing transcripts, resume instead of reusing --session-id. The
+    // CLI treats --session-id as "create/use this active id" and rejects ids
+    // that are already present on disk.
+    if let Some(resume_session_id) = params.resume_session_id.as_deref() {
+        if is_uuid(resume_session_id) {
+            cmd.arg("--resume").arg(resume_session_id);
+        }
+    } else if is_uuid(&params.session_id) {
+        // New session id — use our own UUID so the on-disk transcript
+        // (~/.claude/projects/<enc>/<session_id>.jsonl) is a first-class,
+        // resumable session that Claude Code CLI recognises.
         cmd.arg("--session-id").arg(&params.session_id);
     }
 

@@ -11,24 +11,22 @@ interface ProjectListProps {
 export function ProjectList({ projects, activeId, onSelect, onDelete, onNew }: ProjectListProps) {
   return (
     <div className="flex h-full flex-col" style={{ backgroundColor: 'var(--color-bg-secondary)' }}>
-      <div
-        className="flex items-center justify-between px-3 pb-1.5 pt-3"
-      >
-        <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+      <div className="flex items-center justify-between px-3 pb-2 pt-3">
+        <span className="text-xs font-semibold uppercase" style={{ color: 'var(--color-text-muted)' }}>
           Projects
         </span>
         <button
           onClick={onNew}
-          className="jnt-btn-ghost px-2 py-0.5 text-xs font-medium"
+          className="jnt-btn-ghost px-3 py-1.5 text-sm font-medium"
         >
-          + Add
+          Add
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-1.5">
+      <div className="flex-1 overflow-y-auto px-2">
         {projects.length === 0 ? (
-          <div className="px-3 py-6 text-center text-xs" style={{ color: 'var(--color-text-muted)' }}>
-            No projects yet.<br />Click "+ Add" to create one.
+          <div className="px-3 py-6 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
+            No projects
           </div>
         ) : (
           projects.map((p) => (
@@ -38,7 +36,7 @@ export function ProjectList({ projects, activeId, onSelect, onDelete, onNew }: P
               tabIndex={0}
               onClick={() => onSelect(p.id)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(p.id); } }}
-              className={`jnt-row group mb-0.5 block w-full cursor-pointer rounded-lg px-2.5 py-2 text-left ${p.id === activeId ? 'jnt-row-active' : ''}`}
+              className={`jnt-row group mb-1 block w-full cursor-pointer rounded-lg px-3 py-2.5 text-left ${p.id === activeId ? 'jnt-row-active' : ''}`}
             >
               <div className="flex items-center justify-between">
                 <span
@@ -50,7 +48,7 @@ export function ProjectList({ projects, activeId, onSelect, onDelete, onNew }: P
                   {p.name}
                 </span>
                 <button
-                  className="hidden rounded px-1 text-xs opacity-50 hover:opacity-100 group-hover:inline-block"
+                  className="hidden rounded px-1 text-sm opacity-50 hover:opacity-100 group-hover:inline-block"
                   style={{ color: 'var(--color-error)' }}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -60,10 +58,10 @@ export function ProjectList({ projects, activeId, onSelect, onDelete, onNew }: P
                   ×
                 </button>
               </div>
-              <div className="truncate text-xs" style={{ color: 'var(--color-text-muted)' }}>
+              <div className="truncate text-xs leading-5" style={{ color: 'var(--color-text-muted)' }}>
                 {p.path}
               </div>
-              <div className="mt-0.5 flex items-center gap-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+              <div className="mt-1 flex items-center gap-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
                 <span>{p.sessionCount} sessions</span>
                 {p.gitBranch && (
                   <span style={{ color: 'var(--color-info)' }}>⎇ {p.gitBranch}</span>

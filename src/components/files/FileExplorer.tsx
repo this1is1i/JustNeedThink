@@ -22,7 +22,7 @@ function FileTreeNode({ node, depth, selectedPath, onSelect, onDelete }: {
   return (
     <div>
       <div
-        className={`jnt-row group mx-1 flex cursor-pointer items-center gap-1 rounded-md py-0.5 pr-1 text-sm ${selectedPath === node.path ? 'jnt-row-active' : ''}`}
+        className={`jnt-row group mx-1 flex cursor-pointer items-center gap-1.5 rounded-md py-1.5 pr-1.5 text-sm ${selectedPath === node.path ? 'jnt-row-active' : ''}`}
         style={{
           paddingLeft: `${depth * 16 + 8}px`,
           color: selectedPath === node.path ? 'var(--color-accent)' : 'var(--color-text-secondary)',
@@ -48,7 +48,7 @@ function FileTreeNode({ node, depth, selectedPath, onSelect, onDelete }: {
         <span className="text-xs">{node.isDir ? '📁' : '📄'}</span>
         <span className="flex-1 truncate">{node.name}</span>
         <button
-          className="hidden rounded px-1 text-xs opacity-60 hover:opacity-100 group-hover:inline-block"
+          className="hidden rounded px-1 text-sm opacity-60 hover:opacity-100 group-hover:inline-block"
           style={{ color: 'var(--color-error)' }}
           onClick={(e) => {
             e.stopPropagation();
@@ -74,7 +74,7 @@ function FileTreeNode({ node, depth, selectedPath, onSelect, onDelete }: {
       )}
       {node.isDir && expanded && !hasChildren && (
         <div
-          className="py-0.5 text-xs"
+          className="py-1 text-xs"
           style={{ paddingLeft: `${(depth + 1) * 16 + 8}px`, color: 'var(--color-text-muted)' }}
         >
           (empty)
@@ -94,18 +94,18 @@ export function FileExplorer({ tree, selectedPath, onSelect, onDelete, isLoading
   return (
     <div className="flex h-full flex-col">
       <div
-        className="px-3 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-wider"
+        className="px-3 pb-2 pt-3 text-xs font-semibold uppercase"
         style={{ color: 'var(--color-text-muted)' }}
       >
         Files
       </div>
-      <div className="px-2 pb-1.5" style={{ borderColor: 'var(--color-border)' }}>
+      <div className="px-2 pb-2" style={{ borderColor: 'var(--color-border)' }}>
         <input
           type="text"
           placeholder="Filter files…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="w-full rounded-md border px-2.5 py-1 text-xs outline-none transition-colors focus:border-transparent"
+          className="w-full rounded-md border px-3 py-2 text-sm outline-none transition-colors focus:border-transparent"
           style={{
             backgroundColor: 'var(--color-bg)',
             borderColor: 'var(--color-border)',
@@ -115,9 +115,9 @@ export function FileExplorer({ tree, selectedPath, onSelect, onDelete, isLoading
       </div>
       <div className="flex-1 overflow-y-auto py-1">
         {isLoading ? (
-          <div className="px-3 py-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>Loading...</div>
+          <div className="px-3 py-2 text-sm" style={{ color: 'var(--color-text-muted)' }}>Loading...</div>
         ) : filteredTree.length === 0 ? (
-          <div className="px-3 py-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>No files</div>
+          <div className="px-3 py-2 text-sm" style={{ color: 'var(--color-text-muted)' }}>No files</div>
         ) : (
           filteredTree.map((node) => (
             <FileTreeNode

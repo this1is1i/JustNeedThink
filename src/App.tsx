@@ -122,26 +122,26 @@ function SessionList({ sessions, activeId, onSelect, onDelete, onNew }: {
 
   return (
     <div className="flex flex-col" style={{ backgroundColor: 'var(--color-bg-secondary)' }}>
-      <div className="flex items-center justify-between px-3 pb-1.5 pt-2.5">
-        <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Sessions</span>
+      <div className="flex items-center justify-between px-3 pb-2 pt-3">
+        <span className="text-xs font-semibold uppercase" style={{ color: 'var(--color-text-muted)' }}>Sessions</span>
         <button onClick={onNew} title="New session"
-          className="jnt-btn-ghost flex h-5 w-5 items-center justify-center text-sm leading-none">+</button>
+          className="jnt-btn-ghost flex h-7 w-7 items-center justify-center text-base leading-none">+</button>
       </div>
-      <div className="max-h-[200px] overflow-y-auto px-1.5 pb-1.5">
+      <div className="max-h-[240px] overflow-y-auto px-2 pb-2">
         {sessions.map((s) => (
           <button
             key={s.id}
             onClick={() => onSelect(s.id)}
-            className={`jnt-row mb-0.5 flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left ${s.id === activeId ? 'jnt-row-active' : ''}`}
+            className={`jnt-row mb-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left ${s.id === activeId ? 'jnt-row-active' : ''}`}
           >
-            <span className="jnt-dot h-1.5 w-1.5 flex-shrink-0 rounded-full"
+            <span className="jnt-dot h-2 w-2 flex-shrink-0 rounded-full"
               style={{ backgroundColor: statusColor(s.status), color: statusColor(s.status) }} />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-xs" style={{ color: s.id === activeId ? 'var(--color-text)' : 'var(--color-text-secondary)' }}>
+              <div className="truncate text-sm" style={{ color: s.id === activeId ? 'var(--color-text)' : 'var(--color-text-secondary)' }}>
                 {s.name}
               </div>
             </div>
-            <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
+            <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
               {s.status === 'running' ? 'running' : s.status === 'completed' ? 'done' : 'idle'}
             </span>
             <span
@@ -151,7 +151,7 @@ function SessionList({ sessions, activeId, onSelect, onDelete, onNew }: {
                 event.stopPropagation();
                 if (s.status !== 'running') onDelete(s.id);
               }}
-              className={`flex h-4 w-4 items-center justify-center rounded text-xs ${s.status === 'running' ? 'cursor-not-allowed opacity-30' : 'opacity-50 hover:opacity-100'}`}
+              className={`flex h-5 w-5 items-center justify-center rounded text-sm ${s.status === 'running' ? 'cursor-not-allowed opacity-30' : 'opacity-50 hover:opacity-100'}`}
               style={{ color: 'var(--color-error)' }}
             >×</span>
           </button>
@@ -284,8 +284,8 @@ function AppShell() {
     try {
       const records = await bridge.loadSessionContent(session.path);
       setMessages(id, hydrateMessages(records));
-      // Reuse the CLI-recognised UUID when the user continues this session.
-      setSessionMeta(id, { sessionId: id, stdinId: undefined });
+      // Keep the transcript UUID separate from the next runtime stdin id.
+      setSessionMeta(id, { sessionId: id, resumeSessionId: id, stdinId: undefined });
     } catch (err) {
       console.error('Failed to load session history:', err);
     }
@@ -337,22 +337,27 @@ function AppShell() {
         style={{ backgroundColor: 'var(--color-bg-tertiary)', borderColor: 'var(--color-border)' }}
         data-tauri-drag-region
       >
-        <div className="flex items-center gap-2">
-          <span className="flex h-5 w-5 items-center justify-center rounded-md text-xs font-bold"
+        <div className="flex min-w-0 items-center gap-2" data-tauri-drag-region>
+          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-xs font-bold"
             style={{ backgroundImage: 'var(--gradient-accent)', color: '#04121a' }}>◆</span>
-          <span className="bg-clip-text font-semibold tracking-tight"
-            style={{ backgroundImage: 'var(--gradient-accent)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            JustNeedThink
+          <span className="min-w-0 truncate font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+            {activeProject?.name ?? 'No project selected'}
           </span>
+          {sessionMeta?.sessionId && (
+            <span className="hidden truncate text-xs sm:inline" style={{ color: 'var(--color-text-muted)' }}>
+              {sessionMeta.sessionId.slice(0, 8)}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2.5">
           <button
             onClick={() => setRightPanelOpen(!rightPanelOpen)}
-            className="jnt-btn-ghost px-2.5 py-1 text-xs"
+            title={rightPanelOpen ? 'Hide side panel' : 'Show side panel'}
+            className="jnt-btn-ghost px-3 py-1.5 text-sm"
           >
-            {rightPanelOpen ? 'Hide Panel' : 'Show Panel'}
+            {rightPanelOpen ? 'Hide' : 'Show'}
           </button>
-          <span className="jnt-chip px-2 py-0.5 text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
+          <span className="jnt-chip px-2.5 py-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
             {cliStatus?.version ? `CLI ${cliStatus.version}` : 'v0.2.0'}
           </span>
         </div>
@@ -361,7 +366,7 @@ function AppShell() {
       {/* Main layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left sidebar: projects + sessions */}
-        <aside className="flex w-[240px] flex-col border-r" style={{ borderColor: 'var(--color-border)' }}>
+        <aside className="flex w-[260px] flex-col border-r" style={{ borderColor: 'var(--color-border)' }}>
           <ProjectList
             projects={projects}
             activeId={activeProjectId}
@@ -388,16 +393,16 @@ function AppShell() {
 
         {/* Right panel: files */}
         {rightPanelOpen && (
-          <aside className="flex w-[300px] flex-col border-l" style={{ borderColor: 'var(--color-border)' }}>
+          <aside className="flex w-[340px] flex-col border-l" style={{ borderColor: 'var(--color-border)' }}>
             {/* Tab selector */}
-            <div className="flex items-center gap-1 border-b p-1.5 text-xs" style={{ borderColor: 'var(--color-border)' }}>
+            <div className="flex items-center gap-1 border-b p-2 text-sm" style={{ borderColor: 'var(--color-border)' }}>
               {(['files', 'agents', 'workflows', 'skills'] as const).map((tab) => {
                 const active = rightTab === tab;
                 return (
                   <button
                     key={tab}
                     onClick={() => setRightTab(tab)}
-                    className="flex-1 rounded-md py-1.5 text-center font-medium capitalize transition-colors"
+                    className="flex-1 rounded-md py-2 text-center font-medium capitalize transition-colors"
                     style={{
                       backgroundColor: active ? 'var(--color-surface)' : 'transparent',
                       color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
@@ -442,12 +447,12 @@ function AppShell() {
 
       {/* Status bar */}
       <div
-        className="flex items-center justify-between border-t px-3 py-1.5 text-xs"
+        className="flex items-center justify-between border-t px-4 py-2 text-xs"
         style={{ backgroundColor: 'var(--color-bg-tertiary)', borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
       >
         <span className="flex items-center gap-3">
           <span className="flex items-center gap-1.5">
-            <span className="jnt-dot h-1.5 w-1.5 rounded-full"
+            <span className="jnt-dot h-2 w-2 rounded-full"
               style={{ backgroundColor: cliStatus?.installed ? 'var(--color-success)' : 'var(--color-warning)', color: cliStatus?.installed ? 'var(--color-success)' : 'var(--color-warning)' }} />
             {cliStatus?.installed ? 'CLI ready' : 'connecting'}
           </span>

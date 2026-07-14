@@ -23,13 +23,14 @@ export function ChatPanel({ tabId, cwd }: ChatPanelProps) {
   const activityStatus = tab?.activityStatus ?? IDLE_ACTIVITY;
   const stdinId = tab?.sessionMeta.stdinId ?? null;
   const sessionId = tab?.sessionMeta.sessionId;
+  const resumeSessionId = tab?.sessionMeta.resumeSessionId;
 
   // Auto-scroll to bottom on new content
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, partialText, partialThinking]);
+  }, [messages.length, partialText, partialThinking]);
 
   // Stream processor
   useStreamProcessor(tabId, stdinId);
@@ -42,6 +43,7 @@ export function ChatPanel({ tabId, cwd }: ChatPanelProps) {
         stdinId,
         cwd,
         sessionId,
+        resumeSessionId,
         // The desktop app has no implementation for Claude's stdio permission
         // callback protocol. `acceptEdits` lets normal project file edits run
         // while preserving the CLI's safeguards for more sensitive tools.
@@ -69,7 +71,7 @@ export function ChatPanel({ tabId, cwd }: ChatPanelProps) {
       {/* Activity indicator */}
       {activityStatus.phase !== 'idle' && activityStatus.phase !== 'completed' && (
         <div
-          className="flex-shrink-0 flex items-center gap-2 border-b px-4 py-1.5 text-xs"
+          className="flex-shrink-0 flex items-center gap-2 border-b px-6 py-2 text-sm"
           style={{
             backgroundColor: 'var(--color-bg-tertiary)',
             borderColor: 'var(--color-border)',
@@ -83,67 +85,62 @@ export function ChatPanel({ tabId, cwd }: ChatPanelProps) {
               : 'var(--color-accent)'
             }}
           />
-          {activityStatus.phase === 'thinking' && 'Thinking...'}
-          {activityStatus.phase === 'writing' && 'Writing...'}
-          {activityStatus.phase === 'tool' && `Running: ${activityStatus.toolName || 'tool'}`}
+          {activityStatus.phase === 'thinking' && 'Thinking'}
+          {activityStatus.phase === 'writing' && 'Writing'}
+          {activityStatus.phase === 'tool' && `Running ${activityStatus.toolName || 'tool'}`}
         </div>
       )}
 
       {/* Messages — only this area scrolls */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden px-1 py-2">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6">
         {messages.length === 0 && !isStreaming && (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
             <div className="jnt-pulse flex h-14 w-14 items-center justify-center rounded-2xl text-2xl"
               style={{ backgroundImage: 'var(--gradient-accent)', color: '#04121a' }}>◆</div>
-            <div className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-              Ready when you are
-            </div>
-            <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-              Send a message to start a session
+            <div className="text-base font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+              Ready
             </div>
           </div>
         )}
 
-        {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
-        ))}
+        <div className="mx-auto flex w-full max-w-[900px] flex-col gap-5">
+          {messages.map((msg) => (
+            <MessageBubble key={msg.id} message={msg} />
+          ))}
 
-        {/* Streaming: partial thinking */}
-        {partialThinking && (
-          <div className="px-3 py-1">
-            <details open className="text-xs">
+          {/* Streaming: partial thinking */}
+          {partialThinking && (
+            <details open className="rounded-lg border px-4 py-3 text-sm"
+              style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-bg-tertiary)' }}>
               <summary style={{ color: 'var(--color-text-muted)', cursor: 'pointer' }}>
-                💭 Thinking...
+                Thinking
               </summary>
-              <pre className="mt-1 whitespace-pre-wrap rounded px-3 py-2 text-xs leading-relaxed"
-                style={{ backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-text-muted)' }}>
+              <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap text-sm leading-relaxed"
+                style={{ color: 'var(--color-text-secondary)' }}>
                 {partialThinking}
               </pre>
             </details>
-          </div>
-        )}
+          )}
 
-        {/* Streaming: partial text — rendered as PLAIN text (no markdown) so we
-            don't re-parse the whole growing string on every token. Markdown is
-            applied only once the message is finalized (see MessageBubble). */}
-        {partialText && (
-          <div className="jnt-animate-in flex w-full justify-start px-4 py-1.5">
-            <div
-              className="max-w-[85%] whitespace-pre-wrap break-words px-4 py-2.5 text-sm leading-relaxed"
-              style={{
-                backgroundColor: 'var(--color-surface)',
-                color: 'var(--color-text)',
-                border: '1px solid var(--color-border)',
-                borderRadius: '14px 14px 14px 4px',
-                boxShadow: 'var(--shadow-sm)',
-              }}
-            >
+          {/* Streaming: partial text — kept plain until the message finalizes. */}
+          {partialText && (
+            <div className="jnt-animate-in w-full">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase"
+                style={{ color: 'var(--color-text-muted)' }}>
+                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'var(--color-accent)' }} />
+                Codex
+              </div>
+              <div
+                className="whitespace-pre-wrap break-words text-base leading-7"
+                style={{ color: 'var(--color-text)' }}
+              >
               {partialText}
               <span className="jnt-caret ml-0.5 inline-block h-3.5 w-[3px] rounded-full align-middle"
                 style={{ backgroundColor: 'var(--color-accent)' }} />
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         <div ref={messagesEndRef} />
       </div>

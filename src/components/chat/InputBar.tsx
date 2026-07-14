@@ -1,4 +1,4 @@
-import { useState, useCallback, type KeyboardEvent } from 'react';
+import { useState, useCallback, useEffect, useRef, type KeyboardEvent } from 'react';
 
 interface InputBarProps {
   onSubmit: (message: string) => void;
@@ -9,6 +9,7 @@ interface InputBarProps {
 export function InputBar({ onSubmit, isRunning, placeholder }: InputBarProps) {
   const [input, setInput] = useState('');
   const [focused, setFocused] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSubmit = useCallback(() => {
     const trimmed = input.trim();
@@ -16,6 +17,13 @@ export function InputBar({ onSubmit, isRunning, placeholder }: InputBarProps) {
     onSubmit(trimmed);
     setInput('');
   }, [input, isRunning, onSubmit]);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`;
+  }, [input]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -29,14 +37,14 @@ export function InputBar({ onSubmit, isRunning, placeholder }: InputBarProps) {
 
   return (
     <div
-      className="border-t px-4 py-3"
+      className="border-t px-6 py-4"
       style={{
         backgroundColor: 'var(--color-bg-secondary)',
         borderColor: 'var(--color-border)',
       }}
     >
       <div
-        className="flex items-end gap-2 rounded-xl border p-1.5 transition-shadow"
+        className="mx-auto flex max-w-[900px] items-end gap-3 rounded-xl border px-3 py-2.5 transition-shadow"
         style={{
           backgroundColor: 'var(--color-bg)',
           borderColor: focused ? 'transparent' : 'var(--color-border)',
@@ -44,35 +52,26 @@ export function InputBar({ onSubmit, isRunning, placeholder }: InputBarProps) {
         }}
       >
         <textarea
+          ref={textareaRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          placeholder={placeholder || 'Type a message…  (Enter to send, Shift+Enter for new line)'}
+          placeholder={placeholder || 'Ask Codex to inspect, change, or explain this project'}
           disabled={isRunning}
           rows={1}
-          className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none"
-          style={{ color: 'var(--color-text)', maxHeight: '120px' }}
-          onInput={(e) => {
-            const target = e.target as HTMLTextAreaElement;
-            target.style.height = 'auto';
-            target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
-          }}
+          className="min-h-[48px] flex-1 resize-none bg-transparent px-2 py-3 text-base leading-relaxed outline-none"
+          style={{ color: 'var(--color-text)', maxHeight: '180px' }}
         />
         <button
           onClick={handleSubmit}
           disabled={isRunning || !input.trim()}
-          className="jnt-btn-accent flex-shrink-0 px-4 py-1.5 text-sm"
+          title="Send"
+          className="jnt-btn-accent flex h-10 w-10 flex-shrink-0 items-center justify-center text-lg"
         >
-          {isRunning ? '…' : 'Send'}
+          {isRunning ? '…' : '↑'}
         </button>
-      </div>
-      <div
-        className="mt-1.5 px-1 text-[11px]"
-        style={{ color: 'var(--color-text-muted)' }}
-      >
-        Enter to send · Shift+Enter for new line
       </div>
     </div>
   );

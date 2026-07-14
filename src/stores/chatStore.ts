@@ -27,6 +27,7 @@ export interface ActivityStatus {
 export interface SessionMeta {
   sessionId?: string;
   stdinId?: string;
+  resumeSessionId?: string;
   model?: string;
   turns?: number;
   inputTokens?: number;

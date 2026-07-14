@@ -8,6 +8,7 @@ export interface StartSessionParams {
   cwd: string;
   model?: string;
   session_id: string;
+  resume_session_id?: string;
   thinking_level?: string;
   permission_mode?: string;
   context_window?: number;

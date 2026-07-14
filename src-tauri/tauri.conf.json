@@ -13,12 +13,13 @@
     "windows": [
       {
         "title": "JustNeedThink",
-        "width": 1280,
-        "height": 800,
-        "minWidth": 900,
-        "minHeight": 600,
+        "width": 1200,
+        "height": 760,
+        "minWidth": 980,
+        "minHeight": 640,
         "resizable": true,
         "fullscreen": false,
+        "maximized": true,
         "center": true,
         "decorations": true
       }

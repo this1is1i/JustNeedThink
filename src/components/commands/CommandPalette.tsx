@@ -53,7 +53,11 @@ export function CommandPalette() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         const store = useCommandStore.getState();
-        store.isOpen ? store.close() : store.open();
+        if (store.isOpen) {
+          store.close();
+        } else {
+          store.open();
+        }
       }
       if (e.key === 'Escape' && useCommandStore.getState().isOpen) {
         useCommandStore.getState().close();
@@ -125,16 +129,6 @@ export function CommandPalette() {
               </button>
             ))
           )}
-        </div>
-
-        {/* Footer */}
-        <div
-          className="flex items-center gap-4 border-t px-4 py-2 text-xs"
-          style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
-        >
-          <span>↑↓ Navigate</span>
-          <span>↵ Execute</span>
-          <span>Esc Close</span>
         </div>
       </div>
     </div>
