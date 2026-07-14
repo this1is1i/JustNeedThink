@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, Component } from 'react';
-import { useChatStore } from './stores/chatStore';
+import { useChatStore, generateMessageId, type ChatMessage } from './stores/chatStore';
 import { useFileStore } from './stores/fileStore';
 import { useProjectStore } from './stores/projectStore';
 import { useCreditStore } from './stores/creditStore';
@@ -73,12 +73,46 @@ interface SessionInfo {
   id: string;
   name: string;
   status: string;
+  path?: string;
+  modifiedAt?: number;
 }
 
-function SessionList({ sessions, activeId, onSelect, onNew }: {
+function messageText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((block): block is Record<string, unknown> => Boolean(block) && typeof block === 'object')
+      .filter((block) => block.type === 'text' && typeof block.text === 'string')
+      .map((block) => block.text as string)
+      .join('\n');
+  }
+  return '';
+}
+
+function hydrateMessages(records: unknown[]): ChatMessage[] {
+  const messages: ChatMessage[] = [];
+  for (const record of records) {
+    if (!record || typeof record !== 'object') continue;
+    const entry = record as Record<string, unknown>;
+    const message = entry.message as Record<string, unknown> | undefined;
+    if (!message) continue;
+    const type = entry.type;
+    if (type === 'user') {
+      const content = messageText(message.content);
+      if (content) messages.push({ id: generateMessageId(), role: 'user', type: 'text', content, isPartial: false, timestamp: Date.now() });
+    } else if (type === 'assistant') {
+      const content = messageText(message.content);
+      if (content) messages.push({ id: generateMessageId(), role: 'assistant', type: 'text', content, isPartial: false, timestamp: Date.now() });
+    }
+  }
+  return messages;
+}
+
+function SessionList({ sessions, activeId, onSelect, onDelete, onNew }: {
   sessions: SessionInfo[];
   activeId: string;
   onSelect: (id: string) => void;
+  onDelete: (id: string) => void;
   onNew: () => void;
 }) {
   const statusColor = (status: string) =>
@@ -110,6 +144,16 @@ function SessionList({ sessions, activeId, onSelect, onNew }: {
             <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
               {s.status === 'running' ? 'running' : s.status === 'completed' ? 'done' : 'idle'}
             </span>
+            <span
+              role="button"
+              title={s.status === 'running' ? 'Stop the session before deleting it' : 'Delete session'}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (s.status !== 'running') onDelete(s.id);
+              }}
+              className={`flex h-4 w-4 items-center justify-center rounded text-xs ${s.status === 'running' ? 'cursor-not-allowed opacity-30' : 'opacity-50 hover:opacity-100'}`}
+              style={{ color: 'var(--color-error)' }}
+            >×</span>
           </button>
         ))}
       </div>
@@ -128,7 +172,12 @@ function AppShell() {
   // Chat store
   const [activeSessionId, setActiveSessionId] = useState<string>('main');
   const ensureTab = useChatStore((s) => s.ensureTab);
+  const removeTab = useChatStore((s) => s.removeTab);
+  const setMessages = useChatStore((s) => s.setMessages);
+  const setSessionMeta = useChatStore((s) => s.setSessionMeta);
   const sessionMeta = useChatStore((s) => s.tabs.get(activeSessionId)?.sessionMeta);
+  const activeSessionStatus = useChatStore((s) => s.tabs.get(activeSessionId)?.sessionStatus);
+  const activeSessionStreaming = useChatStore((s) => s.tabs.get(activeSessionId)?.isStreaming);
 
   // Project store
   const projects = useProjectStore((s) => s.projects);
@@ -156,9 +205,7 @@ function AppShell() {
   const fetchCreditSummary = useCreditStore((s) => s.fetchSummary);
 
   // Sessions
-  const [sessions, setSessions] = useState<SessionInfo[]>([
-    { id: 'main', name: 'Main Session', status: 'idle' },
-  ]);
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
 
   // Init
   const checkCli = useCallback(async () => {
@@ -174,21 +221,36 @@ function AppShell() {
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
   useEffect(() => { ensureTab(activeSessionId); }, [ensureTab, activeSessionId]);
 
-  // Load file tree + sessions for active project
+  const refreshSessions = useCallback(async (projectPath: string) => {
+    const diskSessions = await bridge.scanProjectSessions(projectPath);
+    setSessions((current) => {
+      const merged = new Map<string, SessionInfo>();
+      for (const session of current) merged.set(session.id, session);
+      for (const session of diskSessions) {
+        const existing = merged.get(session.id);
+        merged.set(session.id, {
+          id: session.id,
+          name: session.preview || session.id.slice(0, 8),
+          status: existing?.status === 'running' ? 'running' : 'idle',
+          path: session.path,
+          modifiedAt: session.modifiedAt,
+        });
+      }
+      return [...merged.values()]
+        .filter((session) => session.path || session.status === 'running')
+        .sort((a, b) => (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0));
+    });
+  }, []);
+
+  // Load file tree + persisted CLI sessions for the active project.
   useEffect(() => {
     if (activeProject) {
       loadTree(activeProject.path);
-      bridge.scanProjectSessions(activeProject.path).then((diskSessions) => {
-        if (diskSessions.length > 0) {
-          setSessions(diskSessions.map((s) => ({
-            id: s.id,
-            name: s.preview || s.id.slice(0, 8),
-            status: 'idle' as const,
-          })));
-        }
-      }).catch(() => {});
+      void refreshSessions(activeProject.path).catch((err) => {
+        console.error('Failed to scan session history:', err);
+      });
     }
-  }, [activeProject, loadTree]);
+  }, [activeProject, loadTree, refreshSessions]);
 
   // Session status sync
   useEffect(() => {
@@ -198,14 +260,55 @@ function AppShell() {
     const status = tab.sessionStatus === 'running' || tab.isStreaming
       ? 'running' : tab.sessionStatus === 'completed' ? 'completed' : 'idle';
     setSessions((prev) => prev.map((s) => s.id === activeSessionId ? { ...s, status } : s));
-  }, [sessionMeta, activeSessionId]);
+    if (status === 'completed' && activeProject) {
+      void refreshSessions(activeProject.path).catch((err) => {
+        console.error('Failed to refresh session history:', err);
+      });
+    }
+  }, [sessionMeta, activeSessionId, activeSessionStatus, activeSessionStreaming, activeProject, refreshSessions]);
 
   const handleNewSession = useCallback(() => {
-    const id = `session_${Date.now()}`;
+    // Use the same UUID for the UI tab and Claude's on-disk transcript.
+    const id = crypto.randomUUID();
     setSessions((prev) => [...prev, { id, name: `Session ${prev.length}`, status: 'idle' }]);
     ensureTab(id);
+    setSessionMeta(id, { sessionId: id });
     setActiveSessionId(id);
-  }, [ensureTab]);
+  }, [ensureTab, setSessionMeta]);
+
+  const handleSelectSession = useCallback(async (id: string) => {
+    setActiveSessionId(id);
+    ensureTab(id);
+    const session = sessions.find((item) => item.id === id);
+    if (!session?.path) return;
+    try {
+      const records = await bridge.loadSessionContent(session.path);
+      setMessages(id, hydrateMessages(records));
+      // Reuse the CLI-recognised UUID when the user continues this session.
+      setSessionMeta(id, { sessionId: id, stdinId: undefined });
+    } catch (err) {
+      console.error('Failed to load session history:', err);
+    }
+  }, [ensureTab, sessions, setMessages, setSessionMeta]);
+
+  const handleDeleteSession = useCallback(async (id: string) => {
+    if (!activeProject) return;
+    const session = sessions.find((item) => item.id === id);
+    if (!session?.path || session.status === 'running') return;
+    try {
+      await bridge.deleteProjectSession(activeProject.path, id);
+      setSessions((current) => current.filter((item) => item.id !== id));
+      removeTab(id);
+      if (activeSessionId === id) {
+        const nextId = crypto.randomUUID();
+        ensureTab(nextId);
+        setSessionMeta(nextId, { sessionId: nextId });
+        setActiveSessionId(nextId);
+      }
+    } catch (err) {
+      console.error('Failed to delete session:', err);
+    }
+  }, [activeProject, activeSessionId, ensureTab, removeTab, sessions, setSessionMeta]);
 
   const handleProjectSelect = useCallback(async (id: string) => {
     await setActiveProject(id);
@@ -270,7 +373,8 @@ function AppShell() {
             <SessionList
               sessions={sessions}
               activeId={activeSessionId}
-              onSelect={(id) => { setActiveSessionId(id); ensureTab(id); }}
+              onSelect={handleSelectSession}
+              onDelete={handleDeleteSession}
               onNew={handleNewSession}
             />
           )}

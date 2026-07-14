@@ -66,6 +66,9 @@ export const bridge = {
   killSession: (stdinId: string): Promise<void> =>
     invoke<void>('kill_session', { stdinId }),
 
+  respondPermission: (requestId: string, allow: boolean, message?: string): Promise<void> =>
+    invoke<void>('respond_permission', { requestId, allow, message: message ?? null }),
+
   listActiveProcesses: (): Promise<string[]> =>
     invoke<string[]>('list_active_processes'),
 
@@ -76,20 +79,20 @@ export const bridge = {
   readFileContent: (path: string): Promise<string> =>
     invoke<string>('read_file_content', { path }),
 
-  writeFileContent: (path: string, content: string): Promise<void> =>
-    invoke<void>('write_file_content', { path, content }),
+  writeFileContent: (path: string, content: string, root: string): Promise<void> =>
+    invoke<void>('write_file_content', { path, content, root }),
 
-  copyFile: (src: string, dest: string): Promise<void> =>
-    invoke<void>('copy_file', { src, dest }),
+  copyFile: (src: string, dest: string, root: string): Promise<void> =>
+    invoke<void>('copy_file', { src, dest, root }),
 
-  renameFile: (src: string, dest: string): Promise<void> =>
-    invoke<void>('rename_file', { src, dest }),
+  renameFile: (src: string, dest: string, root: string): Promise<void> =>
+    invoke<void>('rename_file', { src, dest, root }),
 
-  deleteFile: (path: string): Promise<void> =>
-    invoke<void>('delete_file', { path }),
+  deleteFile: (path: string, root: string): Promise<void> =>
+    invoke<void>('delete_file', { path, root }),
 
-  createDirectory: (path: string): Promise<void> =>
-    invoke<void>('create_directory', { path }),
+  createDirectory: (path: string, root: string): Promise<void> =>
+    invoke<void>('create_directory', { path, root }),
 
   getFileSize: (path: string): Promise<number> =>
     invoke<number>('get_file_size', { path }),
@@ -160,6 +163,9 @@ export const bridge = {
 
   loadSessionContent: (path: string): Promise<unknown[]> =>
     invoke<unknown[]>('load_session_content', { path }),
+
+  deleteProjectSession: (projectPath: string, sessionId: string): Promise<void> =>
+    invoke<void>('delete_project_session', { projectPath, sessionId }),
 };
 
 export interface SessionListItem {
@@ -205,5 +211,21 @@ export function onSessionExit(
   return listen<{ code: number | null }>(
     `claude:exit:${stdinId}`,
     (event) => callback(event.payload.code),
+  );
+}
+
+export interface PermissionRequestEvent {
+  requestId: string;
+  toolName: string;
+  input: unknown;
+}
+
+export function onClaudePermission(
+  stdinId: string,
+  callback: (request: PermissionRequestEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<PermissionRequestEvent>(
+    `claude:permission:${stdinId}`,
+    (event) => callback(event.payload),
   );
 }

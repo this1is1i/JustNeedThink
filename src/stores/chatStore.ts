@@ -10,6 +10,7 @@ export interface ChatMessage {
   toolName?: string;
   toolInput?: unknown;
   toolResult?: string;
+  permissionId?: string;
   isPartial: boolean;
   timestamp: number;
 }
@@ -74,6 +75,7 @@ interface ChatState {
   removeTab: (tabId: string) => void;
 
   addMessage: (tabId: string, message: ChatMessage) => void;
+  setMessages: (tabId: string, messages: ChatMessage[]) => void;
   updateMessage: (tabId: string, id: string, updates: Partial<ChatMessage>) => void;
   updatePartialMessage: (tabId: string, text: string) => void;
   updatePartialThinking: (tabId: string, text: string) => void;
@@ -117,6 +119,22 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         : [...tab.messages, message];
 
     tabs.set(tabId, { ...tab, messages });
+    set({ tabs });
+  },
+
+  setMessages: (tabId, messages) => {
+    const tabs = new Map(get().tabs);
+    const tab = tabs.get(tabId);
+    if (!tab) return;
+    tabs.set(tabId, {
+      ...tab,
+      messages,
+      partialText: '',
+      partialThinking: '',
+      isStreaming: false,
+      sessionStatus: 'completed',
+      activityStatus: { phase: 'completed' },
+    });
     set({ tabs });
   },
 

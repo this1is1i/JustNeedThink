@@ -87,7 +87,12 @@ pub async fn start_claude_session(
         .ok_or_else(|| "Claude CLI not found. Please install it first.".to_string())?;
 
     let env = build_cli_env(&HashMap::new());
-    let mut cmd = build_claude_command(&cli, &params, &env)?;
+    let permission_config = if params.permission_mode.as_deref() == Some("bypassPermissions") {
+        None
+    } else {
+        Some(state.permission_manager.create_mcp_config(&params.session_id).await?)
+    };
+    let mut cmd = build_claude_command(&cli, &params, &env, permission_config.as_deref())?;
 
     let mut child = cmd
         .stdout(Stdio::piped())
@@ -123,10 +128,36 @@ pub async fn start_claude_session(
     let pm = state.process_manager.clone_arc();
     let sm = state.stdin_manager.clone();
     tokio::spawn(async move {
-        read_stdout_stream(app_clone, child_stdout, &stdin_id_stdout).await;
-        // Cleanup on process exit
+        let timed_out = read_stdout_stream(app_clone.clone(), child_stdout, &stdin_id_stdout).await;
+        // Closing stdin lets a timed-out CLI terminate cleanly. If it remains
+        // alive, force-kill it instead of leaving an untracked child process.
         sm.remove(&stdin_id_stdout).await;
-        pm.remove(&stdin_id_stdout).await;
+        let exit_code = if let Some(proc) = pm.remove(&stdin_id_stdout).await {
+            let mut managed = proc.lock().await;
+            if timed_out {
+                let _ = managed.child.kill().await;
+            }
+            match tokio::time::timeout(
+                tokio::time::Duration::from_secs(3),
+                managed.child.wait(),
+            ).await {
+                Ok(Ok(status)) => status.code(),
+                Ok(Err(err)) => {
+                    log::warn!("[session:{}] Failed to wait for process: {}", stdin_id_stdout, err);
+                    None
+                }
+                Err(_) => {
+                    log::warn!("[session:{}] Process did not exit after stdout closed; killing it", stdin_id_stdout);
+                    let _ = managed.child.kill().await;
+                    managed.child.wait().await.ok().and_then(|status| status.code())
+                }
+            }
+        } else {
+            // kill_session owns the child and emits its actual exit status.
+            return;
+        };
+        let event_name = format!("claude:exit:{}", stdin_id_stdout);
+        let _ = app_clone.emit(&event_name, serde_json::json!({ "code": exit_code }));
     });
 
     // Spawn stderr reader task
@@ -177,6 +208,7 @@ pub async fn send_stdin(
 
 #[tauri::command]
 pub async fn kill_session(
+    app: AppHandle,
     state: State<'_, AppState>,
     stdin_id: String,
 ) -> Result<(), String> {
@@ -188,17 +220,24 @@ pub async fn kill_session(
         let mut managed = proc.lock().await;
         // Give the CLI a moment to flush its session record and exit cleanly;
         // force-kill only if it doesn't terminate on its own.
-        let graceful = tokio::time::timeout(
+        let exit_code = tokio::time::timeout(
             tokio::time::Duration::from_secs(3),
             managed.child.wait(),
         ).await;
-        if graceful.is_err() {
+        let exit_code = match exit_code {
+            Ok(Ok(status)) => status.code(),
+            Ok(Err(err)) => return Err(format!("Failed to wait for process: {}", err)),
+            Err(_) => {
             managed
                 .child
                 .kill()
                 .await
                 .map_err(|e| format!("Failed to kill process: {}", e))?;
-        }
+                managed.child.wait().await.ok().and_then(|status| status.code())
+            }
+        };
+        let event_name = format!("claude:exit:{}", stdin_id);
+        let _ = app.emit(&event_name, serde_json::json!({ "code": exit_code }));
     }
 
     Ok(())
@@ -226,6 +265,7 @@ fn build_claude_command(
     cli: &CliBinary,
     params: &StartSessionParams,
     env: &HashMap<String, String>,
+    permission_config: Option<&std::path::Path>,
 ) -> Result<TokioCommand, String> {
     let mut cmd = if needs_cmd_wrapper(&cli.path.display().to_string()) {
         let mut c = TokioCommand::new("cmd");
@@ -278,7 +318,16 @@ fn build_claude_command(
             cmd.arg("--dangerously-skip-permissions");
         } else {
             cmd.arg("--permission-mode").arg(mode);
-            cmd.arg("--permission-prompt-tool").arg("stdio");
+            if let Some(config) = permission_config {
+                cmd.arg("--mcp-config").arg(config);
+                cmd.arg("--permission-prompt-tool")
+                    .arg("mcp__justneedthink-permission__request_permission");
+                // The permission MCP tool itself must be pre-authorized;
+                // otherwise Claude asks permission to invoke the tool that is
+                // supposed to answer permission prompts, causing a deadlock.
+                cmd.arg("--allowedTools")
+                    .arg("mcp__justneedthink-permission__request_permission");
+            }
         }
     }
 
@@ -290,7 +339,6 @@ fn build_claude_command(
     // Windows: hide all console windows for this process and its children
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::process::CommandExt;
         // CREATE_NO_WINDOW | DETACHED_PROCESS: prevents cmd.exe and all
         // child processes (git, npm, etc.) from creating visible console windows
         cmd.creation_flags(0x08000000 | 0x00000008);
@@ -303,7 +351,7 @@ async fn read_stdout_stream(
     app: AppHandle,
     stdout: tokio::process::ChildStdout,
     stdin_id: &str,
-) {
+) -> bool {
     let reader = BufReader::new(stdout);
     let mut lines = reader.lines();
 
@@ -318,7 +366,7 @@ async fn read_stdout_stream(
             Ok(Err(_)) => break,           // Read error
             Err(_elapsed) => {
                 log::warn!("[stdout:{}] Reader timed out after 30min of inactivity", stdin_id);
-                break;
+                return true;
             }
         };
         if line.trim().is_empty() {
@@ -339,9 +387,7 @@ async fn read_stdout_stream(
         }
     }
 
-    // Process exited — emit exit event
-    let event_name = format!("claude:exit:{}", stdin_id);
-    let _ = app.emit(&event_name, serde_json::json!({ "code": serde_json::Value::Null }));
+    false
 }
 
 async fn read_stderr_stream(

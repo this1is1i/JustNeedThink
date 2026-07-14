@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { bridge, onClaudeStream, onClaudeStderr, onSessionExit } from '../lib/tauri-bridge';
+import { bridge, onClaudePermission, onClaudeStream, onClaudeStderr, onSessionExit } from '../lib/tauri-bridge';
 import { useChatStore, generateMessageId, type ChatMessage } from '../stores/chatStore';
 import { useCreditStore } from '../stores/creditStore';
 
@@ -8,15 +8,6 @@ import { useCreditStore } from '../stores/creditStore';
  * Routes messages between foreground and background tabs.
  */
 export function useStreamProcessor(tabId: string, stdinId: string | null) {
-  const activeRef = useRef(true);
-  const unlistenRef = useRef<Array<() => void>>([]);
-
-  // Mark effect as inactive on cleanup — prevents stale callbacks
-  useEffect(() => {
-    activeRef.current = true;
-    return () => { activeRef.current = false; };
-  }, [stdinId, tabId]);
-
   // Stable store ref for callbacks that are registered once but called many times
   const handlersRef = useRef({
     addMessage: useChatStore.getState().addMessage,
@@ -31,11 +22,19 @@ export function useStreamProcessor(tabId: string, stdinId: string | null) {
   useEffect(() => {
     if (!stdinId) return;
 
+    // `listen` is asynchronous. Keep cancellation local to this particular
+    // effect so a late listener cannot become active after a tab switch.
+    let cancelled = false;
     const cleanups: Array<() => void> = [];
+    const register = (listener: Promise<() => void>) => {
+      void listener.then((unlisten) => {
+        if (cancelled) unlisten();
+        else cleanups.push(unlisten);
+      }).catch((err) => console.error('[stream] Failed to register listener:', err));
+    };
 
-    // Main stream listener — guarded by activeRef, wrapped in try-catch
-    onClaudeStream(stdinId, (message: Record<string, unknown>) => {
-      if (!activeRef.current) return;
+    register(onClaudeStream(stdinId, (message: Record<string, unknown>) => {
+      if (cancelled) return;
       try {
         const h = handlersRef.current;
         handleStreamMessage(message, tabId, {
@@ -50,23 +49,44 @@ export function useStreamProcessor(tabId: string, stdinId: string | null) {
       } catch (err) {
         console.error('[stream] Message handler error:', err);
       }
-    }).then((unlisten) => cleanups.push(unlisten));
+    }));
 
-    // Stderr listener
-    onClaudeStderr(stdinId, (line: string) => {
-      if (!activeRef.current) return;
+    register(onClaudeStderr(stdinId, (line: string) => {
+      if (cancelled) return;
       console.warn(`[stderr:${stdinId}]`, line);
-    }).then((unlisten) => cleanups.push(unlisten));
+      handlersRef.current.addMessage(tabId, {
+        id: generateMessageId(),
+        role: 'system',
+        type: 'tool_result',
+        content: `CLI error: ${line}`,
+        isPartial: false,
+        timestamp: Date.now(),
+      });
+    }));
 
-    // Exit listener
-    onSessionExit(stdinId, (code: number | null) => {
-      if (!activeRef.current) return;
+    register(onSessionExit(stdinId, (code: number | null) => {
+      if (cancelled) return;
       handlersRef.current.setSessionStatus(tabId, code === 0 ? 'completed' : 'error');
-    }).then((unlisten) => cleanups.push(unlisten));
+    }));
 
-    unlistenRef.current = cleanups;
+    register(onClaudePermission(stdinId, (request) => {
+      if (cancelled) return;
+      handlersRef.current.addMessage(tabId, {
+        id: `permission_${request.requestId}`,
+        role: 'system',
+        type: 'permission',
+        content: `Permission required for ${request.toolName}`,
+        toolName: request.toolName,
+        toolInput: request.input,
+        permissionId: request.requestId,
+        isPartial: false,
+        timestamp: Date.now(),
+      });
+      handlersRef.current.setActivityStatus(tabId, { phase: 'awaiting', toolName: request.toolName });
+    }));
 
     return () => {
+      cancelled = true;
       cleanups.forEach((fn) => fn());
     };
   }, [stdinId, tabId]);
@@ -104,27 +124,10 @@ function handleStreamMessage(
       handleStreamEvent(message, tabId, handlers);
       break;
 
-    case 'user': {
-      // Echo of user message — content can be string or content-block array
-      const userMsg = message.message as Record<string, unknown> | undefined;
-      const userContent = userMsg?.content;
-      const safeUserContent: string =
-        typeof userContent === 'string' ? userContent
-        : Array.isArray(userContent)
-          ? userContent.map((b: Record<string, unknown>) =>
-              typeof b.text === 'string' ? b.text : (b.type === 'text' ? String(b.text ?? '') : JSON.stringify(b))
-            ).join('\n')
-          : String(userContent ?? '');
-      handlers.addMessage(tabId, {
-        id: generateMessageId(),
-        role: 'user',
-        type: 'text',
-        content: safeUserContent,
-        isPartial: false,
-        timestamp: Date.now(),
-      });
+    case 'user':
+      // The prompt was inserted optimistically by sendMessage. The CLI echoes
+      // it over stream-json, so rendering it again would duplicate every turn.
       break;
-    }
 
     case 'assistant':
       // Assistant message — full or streaming
@@ -132,6 +135,23 @@ function handleStreamMessage(
       break;
 
     case 'result':
+      // Surface CLI failures rather than leaving the preceding tool card as
+      // the last visible item, which looks like a hung tool invocation.
+      if (message.is_error === true) {
+        const detail = typeof message.result === 'string'
+          ? message.result
+          : typeof message.error === 'string' ? message.error : 'Claude CLI ended with an error';
+        handlers.addMessage(tabId, {
+          id: generateMessageId(),
+          role: 'system',
+          type: 'tool_result',
+          content: `CLI error: ${detail}`,
+          isPartial: false,
+          timestamp: Date.now(),
+        });
+        handlers.setSessionStatus(tabId, 'error');
+        break;
+      }
       // End of turn — clear any live partial and mark complete.
       handlers.clearPartial(tabId);
       handlers.setSessionStatus(tabId, 'completed');
@@ -289,6 +309,7 @@ export async function sendMessage(
   options: {
     stdinId?: string | null;
     cwd: string;
+    sessionId?: string;
     model?: string;
     thinkingLevel?: string;
     permissionMode?: string;
@@ -318,7 +339,7 @@ export async function sendMessage(
   // New session — start CLI process. Use a real UUID so the CLI persists a
   // recognised, resumable transcript at ~/.claude/projects/<enc>/<uuid>.jsonl
   // (passed through as --session-id by the backend).
-  const newStdinId = crypto.randomUUID();
+  const newStdinId = options.sessionId ?? crypto.randomUUID();
   const result = await bridge.startSession({
     prompt,
     cwd: options.cwd,

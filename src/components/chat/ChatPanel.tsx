@@ -22,6 +22,7 @@ export function ChatPanel({ tabId, cwd }: ChatPanelProps) {
   const isStreaming = tab?.isStreaming ?? false;
   const activityStatus = tab?.activityStatus ?? IDLE_ACTIVITY;
   const stdinId = tab?.sessionMeta.stdinId ?? null;
+  const sessionId = tab?.sessionMeta.sessionId;
 
   // Auto-scroll to bottom on new content
   useEffect(() => {
@@ -40,7 +41,11 @@ export function ChatPanel({ tabId, cwd }: ChatPanelProps) {
       const newStdinId = await sendMessage(tabId, prompt, {
         stdinId,
         cwd,
-        permissionMode: 'default',
+        sessionId,
+        // The desktop app has no implementation for Claude's stdio permission
+        // callback protocol. `acceptEdits` lets normal project file edits run
+        // while preserving the CLI's safeguards for more sensitive tools.
+        permissionMode: 'acceptEdits',
       });
       if (newStdinId && !stdinId) {
         useChatStore.getState().setSessionMeta(tabId, { stdinId: newStdinId });

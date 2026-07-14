@@ -12,17 +12,14 @@ pub struct DiskSession {
     pub preview: String,
 }
 
-/// Encode a project path the same way Claude CLI does: every path separator
-/// and drive punctuation becomes `-`, alphanumerics are kept.
+/// Encode a project path the same way Claude CLI does: every non-alphanumeric
+/// path character becomes `-`, while alphanumerics are kept.
 /// `D:\AAWorkSpeace\liteplay\JustNeedThink` → `D--AAWorkSpeace-liteplay-JustNeedThink`
 /// (matches the real `~/.claude/projects/<encoded>/` directory; no leading dash
 /// on Windows drive paths, no `sessions` subfolder).
 fn encode_project_path(path: &str) -> String {
     path.chars()
-        .map(|c| match c {
-            '\\' | '/' | ':' | '.' | ' ' => '-',
-            other => other,
-        })
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
         .collect()
 }
 
@@ -120,4 +117,35 @@ pub fn load_session_content(path: &str) -> Result<Vec<serde_json::Value>, String
         }
     }
     Ok(messages)
+}
+
+/// Permanently remove a Claude session transcript for one project. Constructing
+/// the path from a project root and UUID prevents this IPC command from being
+/// used to delete arbitrary files.
+pub fn delete_project_session(project_path: &str, session_id: &str) -> Result<(), String> {
+    uuid::Uuid::parse_str(session_id)
+        .map_err(|_| "Invalid session identifier".to_string())?;
+    let home = dirs::home_dir().ok_or_else(|| "Unable to locate the home directory".to_string())?;
+    let path = home
+        .join(".claude")
+        .join("projects")
+        .join(encode_project_path(project_path))
+        .join(format!("{}.jsonl", session_id));
+    if !path.is_file() {
+        return Err("Session record was not found".to_string());
+    }
+    std::fs::remove_file(&path).map_err(|e| format!("Failed to delete session record: {}", e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::encode_project_path;
+
+    #[test]
+    fn encodes_special_project_path_characters_like_claude() {
+        assert_eq!(
+            encode_project_path(r"D:\AAWorkSpeace\liteplay\super#web"),
+            "D--AAWorkSpeace-liteplay-super-web",
+        );
+    }
 }

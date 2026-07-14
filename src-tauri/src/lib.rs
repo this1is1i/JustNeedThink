@@ -8,6 +8,7 @@ mod workflow;
 mod error;
 mod filesystem;
 mod project;
+mod permission;
 mod session;
 mod stream;
 mod utils;
@@ -36,6 +37,7 @@ pub struct AppState {
     pub credit_tracker: CreditTracker,
     pub agent_monitor: AgentMonitor,
     pub agent_bus: AgentMessageBus,
+    pub permission_manager: permission::PermissionManager,
 }
 
 impl AppState {
@@ -49,6 +51,7 @@ impl AppState {
             credit_tracker: CreditTracker::new(),
             agent_monitor: AgentMonitor::new(),
             agent_bus: AgentMessageBus::new(),
+            permission_manager: permission::PermissionManager::default(),
         }
     }
 
@@ -64,6 +67,16 @@ impl AppState {
     }
 }
 
+#[tauri::command]
+async fn respond_permission(
+    state: State<'_, AppState>,
+    request_id: String,
+    allow: bool,
+    message: Option<String>,
+) -> Result<(), String> {
+    state.permission_manager.respond(&request_id, allow, message).await
+}
+
 // --- Filesystem Commands ---
 
 #[tauri::command]
@@ -76,29 +89,47 @@ fn read_file_content(path: String) -> Result<String, String> {
     filesystem::ops::read_file_content(&path)
 }
 
-#[tauri::command]
-fn write_file_content(path: String, content: String) -> Result<(), String> {
-    filesystem::ops::write_file_content(&path, &content)
+async fn validate_project_root(state: &AppState, root: &str) -> Result<(), String> {
+    let requested = std::path::Path::new(root).canonicalize()
+        .map_err(|_| "Selected project directory is unavailable".to_string())?;
+    let projects = state.with_db(|db| db::project_repo::list_projects(db)).await?;
+    if projects.into_iter().any(|project| {
+        std::path::Path::new(&project.path).canonicalize().ok().as_ref() == Some(&requested)
+    }) {
+        Ok(())
+    } else {
+        Err("Access denied: filesystem changes require a registered project".to_string())
+    }
 }
 
 #[tauri::command]
-fn copy_file(src: String, dest: String) -> Result<(), String> {
-    filesystem::ops::copy_file(&src, &dest)
+async fn write_file_content(state: State<'_, AppState>, path: String, content: String, root: String) -> Result<(), String> {
+    validate_project_root(&state, &root).await?;
+    filesystem::ops::write_file_content(&path, &content, &root)
 }
 
 #[tauri::command]
-fn rename_file(src: String, dest: String) -> Result<(), String> {
-    filesystem::ops::rename_file(&src, &dest)
+async fn copy_file(state: State<'_, AppState>, src: String, dest: String, root: String) -> Result<(), String> {
+    validate_project_root(&state, &root).await?;
+    filesystem::ops::copy_file(&src, &dest, &root)
 }
 
 #[tauri::command]
-fn delete_file(path: String) -> Result<(), String> {
-    filesystem::ops::delete_file(&path)
+async fn rename_file(state: State<'_, AppState>, src: String, dest: String, root: String) -> Result<(), String> {
+    validate_project_root(&state, &root).await?;
+    filesystem::ops::rename_file(&src, &dest, &root)
 }
 
 #[tauri::command]
-fn create_directory(path: String) -> Result<(), String> {
-    filesystem::ops::create_directory(&path)
+async fn delete_file(state: State<'_, AppState>, path: String, root: String) -> Result<(), String> {
+    validate_project_root(&state, &root).await?;
+    filesystem::ops::delete_file(&path, &root)
+}
+
+#[tauri::command]
+async fn create_directory(state: State<'_, AppState>, path: String, root: String) -> Result<(), String> {
+    validate_project_root(&state, &root).await?;
+    filesystem::ops::create_directory(&path, &root)
 }
 
 #[tauri::command]
@@ -212,6 +243,11 @@ fn load_session_content(path: String) -> Result<Vec<serde_json::Value>, String> 
     session::list::load_session_content(&path)
 }
 
+#[tauri::command]
+fn delete_project_session(project_path: String, session_id: String) -> Result<(), String> {
+    session::list::delete_project_session(&project_path, &session_id)
+}
+
 // --- Agent Commands ---
 
 #[tauri::command]
@@ -280,6 +316,9 @@ pub fn run() {
                 log::warn!("Main window not found — app may be running headless");
             }
 
+            let state = app.state::<AppState>();
+            let handle = app.handle().clone();
+            tauri::async_runtime::block_on(state.permission_manager.start(handle))?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -291,6 +330,8 @@ pub fn run() {
             session::lifecycle::list_active_processes,
             scan_project_sessions,
             load_session_content,
+            delete_project_session,
+            respond_permission,
             // Filesystem
             read_file_tree,
             read_file_content,

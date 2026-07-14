@@ -1,12 +1,35 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-/// Reject paths pointing to sensitive system directories.
-fn validate_path_not_system(path: &str) -> Result<(), String> {
-    let normalized = Path::new(path).canonicalize().unwrap_or_else(|_| Path::new(path).to_path_buf());
-    let s = normalized.display().to_string().to_lowercase();
-    if s.starts_with(r"c:\windows") || s.starts_with(r"c:\windows\system32") {
-        return Err("Access denied: cannot modify system directories".to_string());
+/// Resolve a path through its nearest existing parent. This keeps writes to new
+/// paths inside the canonical project root and prevents `..`/symlink escapes.
+fn canonical_for_access(path: &Path) -> Result<PathBuf, String> {
+    let mut existing = path.to_path_buf();
+    let mut suffix = Vec::new();
+    while !existing.exists() {
+        let name = existing.file_name()
+            .ok_or_else(|| format!("Invalid path: {}", path.display()))?
+            .to_os_string();
+        suffix.push(name);
+        existing.pop();
+    }
+    let mut canonical = existing.canonicalize()
+        .map_err(|e| format!("Failed to resolve path {}: {}", existing.display(), e))?;
+    for part in suffix.iter().rev() {
+        canonical.push(part);
+    }
+    Ok(canonical)
+}
+
+/// Only allow filesystem mutations within the selected project. The root is
+/// supplied by the UI but canonicalization makes a forged root/path pair unable
+/// to escape that root through traversal or existing symlinks.
+fn validate_path_in_root(path: &str, root: &str) -> Result<(), String> {
+    let root = Path::new(root).canonicalize()
+        .map_err(|e| format!("Failed to resolve project root: {}", e))?;
+    let candidate = canonical_for_access(Path::new(path))?;
+    if !candidate.starts_with(&root) {
+        return Err("Access denied: path must be inside the selected project".to_string());
     }
     Ok(())
 }
@@ -29,8 +52,8 @@ pub fn read_file_content(path: &str) -> Result<String, String> {
 }
 
 /// Write content to a file (creates if not exists).
-pub fn write_file_content(path: &str, content: &str) -> Result<(), String> {
-    validate_path_not_system(path)?;
+pub fn write_file_content(path: &str, content: &str, root: &str) -> Result<(), String> {
+    validate_path_in_root(path, root)?;
     let path = Path::new(path);
     if let Some(parent) = path.parent() {
         if !parent.exists() {
@@ -41,7 +64,9 @@ pub fn write_file_content(path: &str, content: &str) -> Result<(), String> {
 }
 
 /// Copy a file or directory.
-pub fn copy_file(src: &str, dest: &str) -> Result<(), String> {
+pub fn copy_file(src: &str, dest: &str, root: &str) -> Result<(), String> {
+    validate_path_in_root(src, root)?;
+    validate_path_in_root(dest, root)?;
     let src_path = Path::new(src);
     if !src_path.exists() {
         return Err(format!("Source not found: {}", src));
@@ -92,7 +117,9 @@ fn copy_dir_recursive(src: &Path, dest: &Path, budget: &mut CopyBudget) -> Resul
 }
 
 /// Rename/move a file or directory.
-pub fn rename_file(src: &str, dest: &str) -> Result<(), String> {
+pub fn rename_file(src: &str, dest: &str, root: &str) -> Result<(), String> {
+    validate_path_in_root(src, root)?;
+    validate_path_in_root(dest, root)?;
     if let Some(parent) = Path::new(dest).parent() {
         if !parent.exists() {
             fs::create_dir_all(parent).map_err(|e| format!("Failed to create dest dir: {}", e))?;
@@ -102,8 +129,8 @@ pub fn rename_file(src: &str, dest: &str) -> Result<(), String> {
 }
 
 /// Delete a file or directory (recursive for directories).
-pub fn delete_file(path: &str) -> Result<(), String> {
-    validate_path_not_system(path)?;
+pub fn delete_file(path: &str, root: &str) -> Result<(), String> {
+    validate_path_in_root(path, root)?;
     let path = Path::new(path);
     if !path.exists() {
         return Err(format!("Not found: {}", path.display()));
@@ -117,7 +144,8 @@ pub fn delete_file(path: &str) -> Result<(), String> {
 }
 
 /// Create a directory (including parents).
-pub fn create_directory(path: &str) -> Result<(), String> {
+pub fn create_directory(path: &str, root: &str) -> Result<(), String> {
+    validate_path_in_root(path, root)?;
     fs::create_dir_all(path).map_err(|e| format!("Failed to create directory: {}", e))
 }
 
@@ -140,10 +168,11 @@ mod tests {
         let file_path = dir.path().join("test.txt");
         let path_str = file_path.to_str().unwrap();
 
-        write_file_content(path_str, "Hello, World!").unwrap();
+        let root = dir.path().to_str().unwrap();
+        write_file_content(path_str, "Hello, World!", root).unwrap();
         assert_eq!(read_file_content(path_str).unwrap(), "Hello, World!");
 
-        delete_file(path_str).unwrap();
+        delete_file(path_str, root).unwrap();
         assert!(read_file_content(path_str).is_err());
     }
 
@@ -158,10 +187,27 @@ mod tests {
         let new_dir = dir.path().join("new_folder").join("sub");
         let path_str = new_dir.to_str().unwrap();
 
-        create_directory(path_str).unwrap();
+        let root = dir.path().to_str().unwrap();
+        create_directory(path_str, root).unwrap();
         assert!(new_dir.exists());
 
-        delete_file(dir.path().join("new_folder").to_str().unwrap()).unwrap();
+        delete_file(dir.path().join("new_folder").to_str().unwrap(), root).unwrap();
         assert!(!dir.path().join("new_folder").exists());
+    }
+
+    #[test]
+    fn mutations_reject_paths_outside_project_root() {
+        let project = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        let target = outside.path().join("outside.txt");
+
+        let result = write_file_content(
+            target.to_str().unwrap(),
+            "must not be written",
+            project.path().to_str().unwrap(),
+        );
+
+        assert!(result.is_err());
+        assert!(!target.exists());
     }
 }

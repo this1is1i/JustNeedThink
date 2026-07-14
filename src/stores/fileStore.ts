@@ -51,12 +51,16 @@ export const useFileStore = create<FileState>()((set, get) => ({
   },
 
   createDirectory: async (path) => {
-    await bridge.createDirectory(path);
+    const root = get().cwd;
+    if (!root) throw new Error('No project is selected');
+    await bridge.createDirectory(path, root);
     await get().refreshTree();
   },
 
   deleteFile: async (path) => {
-    await bridge.deleteFile(path);
+    const root = get().cwd;
+    if (!root) throw new Error('No project is selected');
+    await bridge.deleteFile(path, root);
     if (get().selectedPath === path) {
       set({ selectedPath: null, previewContent: null, previewPath: null });
     }
@@ -64,7 +68,9 @@ export const useFileStore = create<FileState>()((set, get) => ({
   },
 
   writeFile: async (path, content) => {
-    await bridge.writeFileContent(path, content);
+    const root = get().cwd;
+    if (!root) throw new Error('No project is selected');
+    await bridge.writeFileContent(path, content, root);
     if (get().previewPath === path) {
       set({ previewContent: content });
     }

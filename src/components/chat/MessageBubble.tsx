@@ -1,7 +1,8 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ChatMessage } from '../../stores/chatStore';
+import { bridge } from '../../lib/tauri-bridge';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -14,6 +15,10 @@ function truncate(s: string, max: number): string {
 
 function MessageBubbleImpl({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
+
+  if (message.type === 'permission') {
+    return <PermissionBubble message={message} />;
+  }
 
   // Tool use: collapsible card
   if (message.type === 'tool_use') {
@@ -90,6 +95,35 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
           <span className="jnt-caret ml-0.5 inline-block h-3.5 w-[3px] rounded-full align-middle"
             style={{ backgroundColor: 'var(--color-accent)' }} />
         )}
+      </div>
+    </div>
+  );
+}
+
+function PermissionBubble({ message }: MessageBubbleProps) {
+  const [responding, setResponding] = useState(false);
+  const [resolved, setResolved] = useState(false);
+  const respond = async (allow: boolean) => {
+    if (!message.permissionId || responding || resolved) return;
+    setResponding(true);
+    try {
+      await bridge.respondPermission(message.permissionId, allow, allow ? undefined : 'Denied by user');
+      setResolved(true);
+    } finally {
+      setResponding(false);
+    }
+  };
+  const input = message.toolInput ? JSON.stringify(message.toolInput, null, 2) : '';
+  return (
+    <div className="flex w-full justify-start px-4 py-1.5">
+      <div className="w-full max-w-[85%] rounded-lg border p-3 text-sm"
+        style={{ borderColor: 'var(--color-warning)', backgroundColor: 'var(--color-bg-tertiary)' }}>
+        <div className="font-medium" style={{ color: 'var(--color-warning)' }}>Permission required: {message.toolName}</div>
+        {input && <pre className="mt-2 max-h-[160px] overflow-auto whitespace-pre-wrap text-xs" style={{ color: 'var(--color-text-secondary)' }}>{truncate(input, 2000)}</pre>}
+        <div className="mt-3 flex gap-2">
+          <button disabled={responding || resolved} onClick={() => void respond(true)} className="jnt-btn-accent px-3 py-1 text-xs">Allow</button>
+          <button disabled={responding || resolved} onClick={() => void respond(false)} className="jnt-btn-ghost px-3 py-1 text-xs">Deny</button>
+        </div>
       </div>
     </div>
   );
